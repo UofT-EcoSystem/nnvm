@@ -204,6 +204,17 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
           // input section.
           storage_ref_count[sid_in] += entry_ref_count[eid_out];
           storage_inplace_index[eid_out] = kv.first;
+        } else {
+          if (dmlc::GetEnv("USE_COALESCE_SOFTMAX", false)) {
+            LOG(INFO) << "MXNet will be coalescing memory consumptions at softmax layer.";
+            if (storage_ref_count[sid_in] == 2 && 
+                inode.source->attrs.op->name == "_backward_SoftmaxOutput") {
+              taken[kv.first] = true;
+              storage[eid_out] = sid_in;
+              storage_ref_count[sid_in] += entry_ref_count[eid_out];
+              storage_inplace_index[eid_out] = kv.first;
+            }
+          }
         }
       }
     }
