@@ -118,7 +118,7 @@ Graph Gradient(Graph src) {
         << "Cannot differentiate with respect to the " << i+1 << "-th variable "
         << "because it is unreachable from the outputs.";
   }
-
+  /*
   // construct mirror reduece memory strategy if needed
   std::unordered_map<Node*, NodePtr> mirror_map;
   if (mirror_fun != nullptr) {
@@ -138,6 +138,67 @@ Graph Gradient(Graph src) {
         mirror_map[n.get()] = n;
       }
     }
+  }
+   */
+
+  std::unordered_map<NodePtr,
+      std::unordered_map<NodePtr, NodePtr>
+      > mirror_map_modified;
+  // record the list of mirrored operators, for debugging and logging purpose
+  std::unordered_set<std::string> mirror_ops;
+  if (mirror_fun != nullptr) {
+    for (const NodePtr& node_ptr : topo_order) {
+      std::unordered_map<NodePtr, NodePtr> & mirror_nodes =
+          mirror_map_modified[node_ptr];
+      
+      /// @brief  Create a mirror node of the given `NodePtr`.
+      /// @param  _node_ptr node to be considered
+      /// @return If `_node_ptr` CANNOT pass the mirror function,
+      ///           it is directly returned;
+      ///         Otherwise `mirror_nodes` is checked first to see whether
+      ///           or not a mirror node has been previously
+      ///           created mirroring `_node_ptr`;
+      ///         Finally a new node is created and inserted into `mirror_nodes`.
+      std::function<NodePtr(const NodePtr &)> _create_mirror =
+          [&mirror_nodes,
+           &mirror_fun,
+           &mirror_ops,
+           &node_ptr,
+           &_create_mirror]
+          (const NodePtr& _node_ptr) {
+            // return directly if the mirror function returns false
+            if (!mirror_fun(*_node_ptr)) {
+              return _node_ptr;
+            }
+            // return the mirrored node
+            // if it has already been created before
+            std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
+            if ((mirror_node_iter = mirror_nodes.find(_node_ptr))
+                != mirror_nodes.end()) {
+              return mirror_node_iter->second;
+            }
+            // create a new node and insert it into `mirror_nodes`
+            NodePtr new_node = Node::Create();
+            *new_node = *_node_ptr;
+            new_node->attrs.name = _node_ptr->attrs.name +
+                    "_mirror_at_" + node_ptr->attrs.name;
+            mirror_ops.insert(new_node->attrs.op->name);
+            for (NodeEntry &e : new_node->inputs) {
+              e.node = _create_mirror(e.node);
+            }
+            for (NodePtr &n : new_node->control_deps) {
+              n = _create_mirror(n);
+            }
+            return mirror_nodes[_node_ptr] = new_node;
+          };  // _create_mirror
+      _create_mirror(node_ptr);
+    }
+  }
+
+  std::cout << "You have enabled gradient mirroring. "
+            << "Given below is the list of mirrored operators:" << std::endl;
+  for (const std::string &opcode : mirror_ops) {
+    std::cout << "\t" << opcode << std::endl;
   }
 
   // traverse backward
@@ -159,7 +220,17 @@ Graph Gradient(Graph src) {
       out_agg_grads.push_back(e.sum);
     }
     if ((*rit)->inputs.size() != 0) {
-      NodePtr fwd_node = (mirror_map.size() == 0 ? ptr : mirror_map.at(ptr.get()));
+      // NodePtr fwd_node = (mirror_map.size() == 0 ? ptr : mirror_map.at(ptr.get()));
+      NodePtr fwd_node = ptr;
+      if (mirror_map_modified.size() != 0) {
+        std::unordered_map<NodePtr, NodePtr> &mirror_nodes = mirror_map_modified[ptr];
+        std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
+        if ((mirror_node_iter = mirror_nodes.find(ptr))
+            != mirror_nodes.end()) {
+          fwd_node = mirror_node_iter->second;
+        }
+      }
+
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
         input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
