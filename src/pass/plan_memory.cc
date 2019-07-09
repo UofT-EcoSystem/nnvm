@@ -43,6 +43,14 @@ class GraphAllocator {
       if (e->device_id != dev_id) continue;
       if (node_color_.size() != 0 &&
           node_color_[e->released_by_node] != node_color_[node_id]) continue;
+
+      // if ((*idx_)[e->released_by_node].source->attrs.name
+      //     == "att_norminp_minus_mean") {
+      //   std::cout << "The storage released by Node att_norminp_minus_mean "
+      //             << "is stolen by Node "
+      //             << (*idx_)[node_id].source->attrs.name << std::endl;
+      // }
+
       // Use exect matching strategy
       e->max_bytes = std::max(size, e->max_bytes);
       // find a exact match, erase from map and return
@@ -57,6 +65,14 @@ class GraphAllocator {
       if (node_color_.size() != 0 &&
           node_color_[e->released_by_node] != node_color_[node_id]) continue;
       // Use exect matching strategy
+
+      // if ((*idx_)[e->released_by_node].source->attrs.name
+      //     == "att_norminp_minus_mean") {
+      //   std::cout << "The storage released by Node att_norminp_minus_mean "
+      //             << "is stolen by Node "
+      //             << (*idx_)[node_id].source->attrs.name << std::endl;
+      // }
+
       e->max_bytes = std::max(size, e->max_bytes);
       // erase from map and return
       free_.erase(it);
@@ -203,10 +219,19 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
           // to storage. This will get substracted later in free
           // input section.
           storage_ref_count[sid_in] += entry_ref_count[eid_out];
+
+          // if (inode.source->attrs.name == "att_norminp_norm") {
+          //   std::cout << "Inplace optimization is performed. "
+          //             << "Increasing the storage_ref_count of " << sid_in << " "
+          //             << "to " << storage_ref_count[sid_in] << std::endl;
+          // }
+
           storage_inplace_index[eid_out] = kv.first;
         } else {
           if (dmlc::GetEnv("USE_COALESCE_SOFTMAX", false)) {
-            // LOG(INFO) << "MXNet will be coalescing memory consumptions at softmax layer.";
+            // LOG(INFO) << "MXNet will be coalescing the forward and backward "
+            //           << "pass of the softmax layer. "
+            //           << "This implies that the use of `forward_backward` is forbidden.";
             if (storage_ref_count[sid_in] == 2 && 
                 inode.source->attrs.op->name == "_backward_SoftmaxOutput") {
               taken[kv.first] = true;
@@ -260,6 +285,20 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
       if (storage_ref_count[sid] == 0) {
         allocator->Release(sid, nid);
       }
+
+      // if (idx[e.node_id].source->attrs.name == "att_norminp_minus_mean") {
+      //   std::cout << "Storage for Node att_norminp_minus_mean has a " << std::endl
+      //             << "\t""storage_ref_count of " << storage_ref_count[sid] << std::endl
+      //             << "\t""its assigned storage ID is " << sid << std::endl
+      //             << "\t""currently processing Node " << inode.source->attrs.name << std::endl;
+      // }
+      // if (inode.source->attrs.name == "att_norminp_minus_mean") {
+      //   std::cout << "Storage for Node att_norminp_minus_mean has the following  inputs: " << std::endl
+      //             << "\t""storage_ref_count of " << storage_ref_count[sid] << std::endl
+      //             << "\t""  entry_ref_count of " <<   entry_ref_count[eid] << " "
+      //             << "@ Node " << idx[inode.inputs[i].node_id].source->attrs.name << std::endl
+      //             << "\t""its assigned storage ID is " << sid << std::endl;
+      // }
     }
     // check if there are outputs that can be freeded immediately
     // these output are not referenced by any operator.
@@ -274,6 +313,13 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
       if (storage[eid] == GraphAllocator::kBadStorageID) {
         ++num_not_allocated;
       }
+
+      // if (inode.source->attrs.name == "att_norminp_minus_mean") {
+      //   std::cout << "Storage for Node att_norminp_minus_mean has the following outputs: " << std::endl
+      //             << "\t""storage_ref_count of " << storage_ref_count[sid] << std::endl
+      //             << "\t""  entry_ref_count of " <<   entry_ref_count[eid] << std::endl
+      //             << "\t""its assigned storage ID is " << sid << std::endl;
+      // }
     }
   }
   return num_not_allocated;
@@ -301,6 +347,12 @@ Graph PlanMemory(Graph ret) {
       if (inode.source->is_variable()) continue;
       for (const auto& e : inode.inputs) {
         ++ref_count[idx.entry_id(e)];
+        // if (idx[e.node_id].source->attrs.name 
+        //     == "att_norminp_minus_mean") {
+        //   std::cout << "Node " << inode.source->attrs.name << " is referencing "
+        //             << "Node att_norminp_minus_mean"
+        //             << std::endl;
+        // }
       }
       // no dataflow dependency is needed for those are ignored.
       // revoke the dependency counter.
@@ -325,7 +377,7 @@ Graph PlanMemory(Graph ret) {
 
   // Search the best NNVM_EXEC_MATCH_RANGE parameter. This is turned off by default
   size_t min_allocated_bytes = -1;
-  size_t max_match_range = dmlc::GetEnv("NNVM_EXEC_MATCH_RANGE", 16);
+  size_t max_match_range = dmlc::GetEnv("NNVM_EXEC_MATCH_RANGE", 2);
   size_t min_match_range =
          dmlc::GetEnv("NNVM_AUTO_SEARCH_MATCH_RANGE", false) ? 1 : max_match_range;
   for (size_t match_range = min_match_range; match_range <= max_match_range; match_range *= 2) {
@@ -341,6 +393,10 @@ Graph PlanMemory(Graph ret) {
       AllocMemory(ret, idx, node_range, &storage_vec, &storage_inplace_index,
                   ref_count, &allocator);
     size_t storage_allocated_bytes = allocator.TotalAllocBytes();
+
+    // std::cout << "Auto search range: " << match_range << ", "
+    //           << "Allocated storage: " << storage_allocated_bytes << std::endl;
+
     // Choose the plan which leads to minimal memory usage
     if (min_allocated_bytes > storage_allocated_bytes) {
       ret.attrs["storage_id"] = std::make_shared<any>(std::move(storage_vec));

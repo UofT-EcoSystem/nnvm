@@ -195,10 +195,12 @@ Graph Gradient(Graph src) {
     }
   }
 
-  std::cout << "You have enabled gradient mirroring. "
-            << "Given below is the list of mirrored operators:" << std::endl;
-  for (const std::string &opcode : mirror_ops) {
-    std::cout << "\t" << opcode << std::endl;
+  if (mirror_map_modified.size() != 0) {
+    std::cout << "You have enabled gradient mirroring. "
+              << "Given below is the list of mirrored operators:" << std::endl;
+    for (const std::string &opcode : mirror_ops) {
+      std::cout << "\t" << opcode << std::endl;
+    }
   }
 
   // traverse backward
