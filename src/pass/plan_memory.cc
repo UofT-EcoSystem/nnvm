@@ -46,6 +46,18 @@ class GraphAllocator {
       if (node_color_.size() != 0 &&
           node_color_[e->released_by_node] != node_color_[node_id]) continue;
 
+      // if ((*idx_)[e->released_by_node].source->attrs.name
+      //     == "decoder_rnn_l0_t6_i2h") {
+      //   std::cout << "The storage released by decoder_rnn_l0_t6_i2h is taken by node " 
+      //             << (*idx_)[node_id].source->attrs.name << std::endl;
+      // }
+      // if ((*idx_)[node_id].source->attrs.name 
+      //     == "decoder_rnn_l0_t6_i2h") {
+      //   std::cout << "Node " << (*idx_)[node_id].source->attrs.name << " "
+      //             << "is taking the storage released by Node "
+      //             << (*idx_)[e->released_by_node].source->attrs.name << std::endl;
+      // }
+
       // Use exect matching strategy
       e->max_bytes = std::max(size, e->max_bytes);
       // find a exact match, erase from map and return
@@ -59,6 +71,18 @@ class GraphAllocator {
       if (e->device_id != dev_id) continue;
       if (node_color_.size() != 0 &&
           node_color_[e->released_by_node] != node_color_[node_id]) continue;
+
+      // if ((*idx_)[e->released_by_node].source->attrs.name
+      //     == "decoder_rnn_l0_t6_i2h") {
+      //   std::cout << "The storage released by decoder_rnn_l0_t6_i2h is taken by node " 
+      //             << (*idx_)[node_id].source->attrs.name << std::endl;
+      // } 
+      // if ((*idx_)[node_id].source->attrs.name 
+      //     == "decoder_rnn_l0_t6_i2h") {
+      //   std::cout << "Node " << (*idx_)[node_id].source->attrs.name << " "
+      //             << "is taking the storage released by Node "
+      //             << (*idx_)[e->released_by_node].source->attrs.name << std::endl;
+      // }
 
       // Use exect matching strategy
       e->max_bytes = std::max(size, e->max_bytes);
@@ -270,6 +294,11 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
         allocator->Release(sid, nid);
       }
 
+      // if (idx[e.node_id].source->attrs.name == "decoder_rnn_l0_t6_i2h") {
+      //   std::cout << "Node decoder_rnn_l0_t6_i2h has a " << std::endl
+      //             << "\t""storage_ref_count of " 
+      //             << storage_ref_count[eid] << std::endl;
+      // }
     }
     // check if there are outputs that can be freeded immediately
     // these output are not referenced by any operator.
