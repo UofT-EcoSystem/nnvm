@@ -171,23 +171,29 @@ Graph Gradient(Graph src) {
       ///           or not a mirror node has been previously
       ///           created mirroring `_node_ptr`;
       ///         Finally a new node is created and inserted into `mirror_nodes`.
-      std::function<NodePtr(const NodePtr&, const unsigned)> _create_mirror =
+      std::function<NodePtr(
+           const NodePtr&,
+           std::vector<std::string>&)> _create_mirror =
           [&mirror_nodes,
            &mirror_fun,
            &mirror_ops,
            &mirror_depth_stats,
            &node_ptr,
            &_create_mirror]
-          (const NodePtr& _node_ptr, const unsigned mirror_depth) {
+          (const NodePtr& _node_ptr,
+           std::vector<std::string>& mirror_node_list) {
 #define LOG_MAXIMUM_MIRROR_DEPTH() \
-  if (mirror_depth != 0) {  \
-    if (mirror_depth_stats.find(mirror_depth) !=  \
+  if (mirror_depth != 0) { \
+     \
+    if (mirror_depth_stats.find(mirror_depth) != \
         mirror_depth_stats.end()) { \
-      mirror_depth_stats[mirror_depth] += 1;  \
-    } else {  \
-      mirror_depth_stats[mirror_depth]  = 0;  \
+      mirror_depth_stats[mirror_depth] += 1; \
+    } else { \
+      mirror_depth_stats[mirror_depth]  = 0; \
     } \
   }
+            unsigned mirror_depth = mirror_node_list.size();
+
             // return directly if the mirror function returns false
             if (!mirror_fun(*_node_ptr, mirror_depth)) {
               LOG_MAXIMUM_MIRROR_DEPTH();
@@ -208,14 +214,21 @@ Graph Gradient(Graph src) {
                     "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
             for (NodeEntry &e : new_node->inputs) {
-              e.node = _create_mirror(e.node, mirror_depth + 1);
+              mirror_node_list.push_back(new_node->attrs.name);
+              e.node = _create_mirror(e.node,
+                  mirror_node_list);
+              mirror_node_list. pop_back();
             }
             for (NodePtr &n : new_node->control_deps) {
-              n = _create_mirror(n, mirror_depth + 1);
+              mirror_node_list.push_back(new_node->attrs.name);
+              n = _create_mirror(n,
+                  mirror_node_list);
+              mirror_node_list. pop_back();
             }
             return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
-      _create_mirror(node_ptr, 0);
+      std::vector<std::string> mirror_node_trace;
+      _create_mirror(node_ptr, mirror_node_trace);
     }
   }
 
