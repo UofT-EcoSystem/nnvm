@@ -164,13 +164,13 @@ Graph Gradient(Graph src) {
       ///           or not a mirror node has been previously
       ///           created mirroring `_node_ptr`;
       ///         Finally a new node is created and inserted into `mirror_nodes`.
-      std::function<NodePtr(const NodePtr &)> _create_mirror =
+      std::function<NodePtr(const NodePtr&, const unsigned)> _create_mirror =
           [&mirror_nodes,
            &mirror_fun,
            &mirror_ops,
            &node_ptr,
            &_create_mirror]
-          (const NodePtr& _node_ptr, const unsigned mirror_depth=0) {
+          (const NodePtr& _node_ptr, const unsigned mirror_depth) {
             // return directly if the mirror function returns false
             if (!mirror_fun(*_node_ptr)) {
               return _node_ptr;
@@ -189,14 +189,14 @@ Graph Gradient(Graph src) {
                     "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
             for (NodeEntry &e : new_node->inputs) {
-              e.node = _create_mirror(e.node);
+              e.node = _create_mirror(e.node, mirror_depth + 1);
             }
             for (NodePtr &n : new_node->control_deps) {
-              n = _create_mirror(n);
+              n = _create_mirror(n, mirror_depth + 1);
             }
             return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
-      _create_mirror(node_ptr);
+      _create_mirror(node_ptr, 0);
     }
   }
 
