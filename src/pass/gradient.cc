@@ -152,7 +152,12 @@ Graph Gradient(Graph src) {
           mirror_map_modified[node_ptr];
       
       /// @brief  Create a mirror node of the given `NodePtr`.
-      /// @param  _node_ptr node to be considered
+      /// @param  _node_ptr      node to be considered
+      /// @param  mirror_depth   the mirror depth
+      ///        (This corresponds to the number of recursive calls made.
+      ///         The `mirror_depth` needs to be restricted to limit 
+      ///           the performance overhead.
+      ///         The optimal maximum, however, still remains to be discovered.)
       /// @return If `_node_ptr` CANNOT pass the mirror function,
       ///           it is directly returned;
       ///         Otherwise `mirror_nodes` is checked first to see whether
@@ -165,7 +170,7 @@ Graph Gradient(Graph src) {
            &mirror_ops,
            &node_ptr,
            &_create_mirror]
-          (const NodePtr& _node_ptr) {
+          (const NodePtr& _node_ptr, const unsigned mirror_depth=0) {
             // return directly if the mirror function returns false
             if (!mirror_fun(*_node_ptr)) {
               return _node_ptr;
