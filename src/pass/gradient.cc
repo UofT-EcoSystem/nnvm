@@ -13,6 +13,8 @@ namespace nnvm {
 namespace pass {
 namespace {
 
+static bool logged_mirror_path = false;
+
 // default aggregate gradient function
 // require operator __zero__ and __ewise_sum__ to be presented.
 NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
@@ -184,11 +186,13 @@ Graph Gradient(Graph src) {
            std::vector<std::string>& mirror_node_list) {
 #define LOG_MAXIMUM_MIRROR_DEPTH() \
   if (mirror_depth != 0) { \
-    LOG(INFO) << "Mirror Path @ Node " \
-              << node_ptr->attrs.name; \
-    for (const std::string& mirror_node_name \
-        : mirror_node_list) { \
-      LOG(INFO) <<  "\t" << mirror_node_name; \
+    if (!logged_mirror_path) { \
+      LOG(INFO) << "Mirror Path @ Node " \
+                << node_ptr->attrs.name; \
+      for (const std::string& mirror_node_name \
+          : mirror_node_list) { \
+        LOG(INFO) <<  "\t" << mirror_node_name; \
+      } \
     } \
     if (mirror_depth_stats.find(mirror_depth) != \
         mirror_depth_stats.end()) { \
@@ -225,7 +229,7 @@ Graph Gradient(Graph src) {
               mirror_node_list. pop_back();
             }
             for (NodePtr &n : new_node->control_deps) {
-              mirror_node_list.push_back(new_node->attrs.name);
+              mirror_node_list.push_back(_node_ptr->attrs.name);
               n = _create_mirror(n,
                   mirror_node_list);
               mirror_node_list. pop_back();
@@ -236,6 +240,8 @@ Graph Gradient(Graph src) {
       _create_mirror(node_ptr, mirror_node_trace);
     }
   }
+
+  logged_mirror_path = true;  // mirror path is logged for only once
 
   if (mirror_ops.size() != 0) {
     LOG(INFO) << "You have enabled gradient mirroring.";
