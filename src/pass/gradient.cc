@@ -220,19 +220,18 @@ Graph Gradient(Graph src) {
   }
 
   if (mirror_ops.size() != 0) {
-    LOG(INFO) << "You have enabled gradient mirroring." << std::endl
-              << "\t""Given below is "
-              << "the list of mirrored operators:" << std::endl;
+    LOG(INFO) << "You have enabled gradient mirroring.";
+    LOG(INFO) << "\t""Given below is "
+              << "the list of mirrored operators:";
     for (const std::string &opcode : mirror_ops) {
-      LOG(INFO) << "\t\t" << opcode << std::endl;
+      LOG(INFO) << "\t\t" << opcode;
     }
     LOG(INFO) << "\t""Given below is "
-              << "the list of mirror depths:" << std::endl;
+              << "the list of mirror depths:";
     for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
         : mirror_depth_stats) {
       LOG(INFO) << "\t\t" << mirror_depth_cnt_pair.first << " : "
-                          << mirror_depth_cnt_pair.second
-                << std::endl;
+                          << mirror_depth_cnt_pair.second;
     }
   }
 
