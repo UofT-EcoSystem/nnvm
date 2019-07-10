@@ -59,8 +59,12 @@ struct GradEntry {
 
 Graph Gradient(Graph src) {
   using nnvm::FGradient;
-  using MirrorFun = std::function<int (const Node& node)>;
-  using AttrHintFun = std::function<NodeEntry (const NodeEntry& src, const NodeEntry &like)>;
+  using MirrorFun = std::function<bool(
+      const Node& node,
+      const unsigned mirror_depth)>;
+  using AttrHintFun = std::function<NodeEntry(
+      const NodeEntry& src,
+      const NodeEntry& like)>;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
       << "Gradient require grad_ys to be presented.";
@@ -185,7 +189,7 @@ Graph Gradient(Graph src) {
     } \
   }
             // return directly if the mirror function returns false
-            if (!mirror_fun(*_node_ptr)) {
+            if (!mirror_fun(*_node_ptr, mirror_depth)) {
               LOG_MAXIMUM_MIRROR_DEPTH();
               return _node_ptr;
             }
@@ -216,17 +220,17 @@ Graph Gradient(Graph src) {
   }
 
   if (mirror_ops.size() != 0) {
-    std::cout << "You have enabled gradient mirroring." << std::endl
+    LOG(INFO) << "You have enabled gradient mirroring." << std::endl
               << "\t""Given below is "
               << "the list of mirrored operators:" << std::endl;
     for (const std::string &opcode : mirror_ops) {
-      std::cout << "\t\t" << opcode << std::endl;
+      LOG(INFO) << "\t\t" << opcode << std::endl;
     }
-    std::cout << "\t""Given below is "
+    LOG(INFO) << "\t""Given below is "
               << "the list of mirror depths:" << std::endl;
     for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
         : mirror_depth_stats) {
-      std::cout << "\t\t" << mirror_depth_cnt_pair.first << " : "
+      LOG(INFO) << "\t\t" << mirror_depth_cnt_pair.first << " : "
                           << mirror_depth_cnt_pair.second
                 << std::endl;
     }
