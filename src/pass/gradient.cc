@@ -146,11 +146,14 @@ Graph Gradient(Graph src) {
       > mirror_map_modified;
   // record the list of mirrored operators, for debugging and logging purpose
   std::unordered_set<std::string> mirror_ops;
+  // record the statistics on mirror depth
+  std::map<unsigned, unsigned> mirror_depth_stats;
+
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
       std::unordered_map<NodePtr, NodePtr> & mirror_nodes =
           mirror_map_modified[node_ptr];
-      
+
       /// @brief  Create a mirror node of the given `NodePtr`.
       /// @param  _node_ptr      node to be considered
       /// @param  mirror_depth   the mirror depth
@@ -168,11 +171,22 @@ Graph Gradient(Graph src) {
           [&mirror_nodes,
            &mirror_fun,
            &mirror_ops,
+           &mirror_depth_stats,
            &node_ptr,
            &_create_mirror]
           (const NodePtr& _node_ptr, const unsigned mirror_depth) {
+#define LOG_MAXIMUM_MIRROR_DEPTH() \
+  if (mirror_depth != 0) {  \
+    if (mirror_depth_stats.find(mirror_depth) !=  \
+        mirror_depth_stats.end()) { \
+      mirror_depth_stats[mirror_depth] += 1;  \
+    } else {  \
+      mirror_depth_stats[mirror_depth]  = 0;  \
+    } \
+  }
             // return directly if the mirror function returns false
             if (!mirror_fun(*_node_ptr)) {
+              LOG_MAXIMUM_MIRROR_DEPTH();
               return _node_ptr;
             }
             // return the mirrored node
@@ -180,6 +194,7 @@ Graph Gradient(Graph src) {
             std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
             if ((mirror_node_iter = mirror_nodes.find(_node_ptr))
                 != mirror_nodes.end()) {
+              LOG_MAXIMUM_MIRROR_DEPTH();
               return mirror_node_iter->second;
             }
             // create a new node and insert it into `mirror_nodes`
@@ -201,10 +216,19 @@ Graph Gradient(Graph src) {
   }
 
   if (mirror_ops.size() != 0) {
-    std::cout << "You have enabled gradient mirroring. "
-              << "Given below is the list of mirrored operators:" << std::endl;
+    std::cout << "You have enabled gradient mirroring." << std::endl
+              << "\t""Given below is "
+              << "the list of mirrored operators:" << std::endl;
     for (const std::string &opcode : mirror_ops) {
-      std::cout << "\t" << opcode << std::endl;
+      std::cout << "\t\t" << opcode << std::endl;
+    }
+    std::cout << "\t""Given below is "
+              << "the list of mirror depths:" << std::endl;
+    for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
+        : mirror_depth_stats) {
+      std::cout << "\t\t" << mirror_depth_cnt_pair.first << " : "
+                          << mirror_depth_cnt_pair.second
+                << std::endl;
     }
   }
 
