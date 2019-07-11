@@ -225,8 +225,26 @@ Graph Gradient(Graph src) {
             return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
       _create_mirror(node_ptr, 0);
-    }
-  }
+
+      if (!logged_mirror_path) {
+        if (node_ptr->op()->name == "_plus_scalar" ||
+            node_ptr->op()->name == "elementwise_add" ||
+            node_ptr->op()->name == "broadcast_add" ||
+            node_ptr->op()->name == "broadcast_sub" ||
+            node_ptr->op()->name == "broadcast_not_equal") {
+          continue;
+        }
+        if (mirror_nodes.size() != 0) {
+          LOG(INFO) << "List of Mirrored Nodes @ Node "
+                    << NodePtr2Str(node_ptr);
+        }
+        for (const std::pair<NodePtr, NodePtr> &nn_pair
+            : mirror_nodes) {
+          LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
+        }
+      }  // if (!logged_mirror_path)
+    }  // for (const NodePtr& node_ptr : topo_order)
+  }  // if (mirror_fun != nullptr)
 
   logged_mirror_path = true;  // mirror path is logged for only once
 
