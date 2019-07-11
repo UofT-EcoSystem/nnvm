@@ -227,7 +227,8 @@ Graph Gradient(Graph src) {
       _create_mirror(node_ptr, 0);
 
       if (!logged_mirror_path) {
-        if (node_ptr->op()->name == "_plus_scalar" ||
+        if (node_ptr->op() == nullptr || 
+            node_ptr->op()->name == "_plus_scalar" ||
             node_ptr->op()->name == "elementwise_add" ||
             node_ptr->op()->name == "broadcast_add" ||
             node_ptr->op()->name == "broadcast_sub" ||
