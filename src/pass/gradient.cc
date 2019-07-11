@@ -185,7 +185,7 @@ Graph Gradient(Graph src) {
           (const NodePtr& _node_ptr,
            std::vector<std::string>& mirror_node_list) {
 #define LOG_MAXIMUM_MIRROR_DEPTH() \
-  if (mirror_depth != 0) { \
+  if (mirror_depth > 1) { \
     if (!logged_mirror_path) { \
       LOG(INFO) << "Mirror Path @ Node " \
                 << node_ptr->attrs.name; \
