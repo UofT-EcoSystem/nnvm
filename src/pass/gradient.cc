@@ -155,6 +155,17 @@ Graph Gradient(Graph src) {
   // record the statistics on mirror depth
   std::map<unsigned, unsigned> mirror_depth_stats;
 
+  std::function<std::string(const NodePtr&)> NodePtr2Str =
+      [](const NodePtr& ptr) {
+    if (ptr->attrs.op == nullptr) {
+      // The node is a variable node, only return the attribute name.
+      return "(Node=" + ptr->attrs.name + ")";
+    } else {
+      return "(Node=" + ptr->attrs.name + ", \t" + 
+                "Op=" + ptr->attrs.op->name + ")";
+    }
+  };  // NodePtr2Str
+
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
       std::unordered_map<NodePtr, NodePtr> & mirror_nodes =
@@ -175,23 +186,24 @@ Graph Gradient(Graph src) {
       ///         Finally a new node is created and inserted into `mirror_nodes`.
       std::function<NodePtr(
            const NodePtr&,
-           std::vector<std::string>&)> _create_mirror =
+           std::vector<NodePtr>&)> _create_mirror =
           [&mirror_nodes,
            &mirror_fun,
            &mirror_ops,
            &mirror_depth_stats,
            &node_ptr,
+           &NodePtr2Str,
            &_create_mirror]
           (const NodePtr& _node_ptr,
-           std::vector<std::string>& mirror_node_list) {
+           std::vector<NodePtr>& mirror_node_list) {
 #define LOG_MAXIMUM_MIRROR_DEPTH() \
   if (mirror_depth > 1) { \
     if (!logged_mirror_path) { \
       LOG(INFO) << "Mirror Path @ Node " \
-                << node_ptr->attrs.name; \
-      for (const std::string& mirror_node_name \
+                << NodePtr2Str(node_ptr); \
+      for (const NodePtr& mirror_node \
           : mirror_node_list) { \
-        LOG(INFO) <<  "\t" << mirror_node_name; \
+        LOG(INFO) <<  "\t" << NodePtr2Str(mirror_node); \
       } \
     } \
     if (mirror_depth_stats.find(mirror_depth) != \
@@ -223,20 +235,20 @@ Graph Gradient(Graph src) {
                     "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
             for (NodeEntry &e : new_node->inputs) {
-              mirror_node_list.push_back(_node_ptr->attrs.name);
+              mirror_node_list.push_back(_node_ptr);
               e.node = _create_mirror(e.node,
                   mirror_node_list);
               mirror_node_list. pop_back();
             }
             for (NodePtr &n : new_node->control_deps) {
-              mirror_node_list.push_back(_node_ptr->attrs.name);
+              mirror_node_list.push_back(_node_ptr);
               n = _create_mirror(n,
                   mirror_node_list);
               mirror_node_list. pop_back();
             }
             return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
-      std::vector<std::string> mirror_node_trace;
+      std::vector<NodePtr> mirror_node_trace;
       _create_mirror(node_ptr, mirror_node_trace);
     }
   }
