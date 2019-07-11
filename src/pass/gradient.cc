@@ -223,7 +223,7 @@ Graph Gradient(Graph src) {
                     "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
             for (NodeEntry &e : new_node->inputs) {
-              mirror_node_list.push_back(new_node->attrs.name);
+              mirror_node_list.push_back(_node_ptr->attrs.name);
               e.node = _create_mirror(e.node,
                   mirror_node_list);
               mirror_node_list. pop_back();
