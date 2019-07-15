@@ -153,7 +153,7 @@ Graph Gradient(Graph src) {
   // record the list of mirrored operators, for debugging and logging purpose
   std::unordered_set<std::string> mirror_ops;
   // record the statistics on mirror depth
-  std::map<unsigned, unsigned> mirror_depth_stats;
+  // std::map<unsigned, unsigned> mirror_depth_stats;
 
   std::function<std::string(const NodePtr&)> NodePtr2Str =
       [](const NodePtr& ptr) {
@@ -190,7 +190,7 @@ Graph Gradient(Graph src) {
           [&mirror_nodes,
            &mirror_fun,
            &mirror_ops,
-           &mirror_depth_stats,
+          //  &mirror_depth_stats,
            &node_ptr,
            &NodePtr2Str,
            &_create_mirror]
@@ -256,13 +256,13 @@ Graph Gradient(Graph src) {
     for (const std::string &opcode : mirror_ops) {
       LOG(INFO) << "\t\t" << opcode;
     }
-    LOG(INFO) << "\t""Given below is "
-              << "the list of mirror depths:";
-    for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
-        : mirror_depth_stats) {
-      LOG(INFO) << "\t\t" << mirror_depth_cnt_pair.first << " : "
-                          << mirror_depth_cnt_pair.second;
-    }
+    // LOG(INFO) << "\t""Given below is "
+    //           << "the list of mirror depths:";
+    // for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
+    //     : mirror_depth_stats) {
+    //   LOG(INFO) << "\t\t" << mirror_depth_cnt_pair.first << " : "
+    //                       << mirror_depth_cnt_pair.second;
+    // }
   }
 
   // traverse backward
