@@ -222,10 +222,11 @@ Graph Gradient(Graph src) {
 
             // return directly if the mirror function returns false
             if (!mirror_fun(*curr_node_ptr, mirror_depth)) {
-              if (mirror_boundary.find(curr_node_ptr) ==
+              // record the parent node as one of the node bounaries,
+              //   under the condition that it is not `nullptr`
+              if (mirror_boundary.find(prev_node_ptr) ==
                   mirror_boundary.end()) {
-                // record the current node as one of the node boundaries
-                mirror_boundary.insert(curr_node_ptr);
+                mirror_boundary.insert(prev_node_ptr);
               }
               return curr_node_ptr;
             }
