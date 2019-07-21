@@ -206,6 +206,7 @@ Graph Gradient(Graph src) {
       ///         Finally a new node is created and inserted into `mirror_nodes`.
       std::function<NodePtr(
            const NodePtr&,
+           const NodePtr&,
            const unsigned)> _create_mirror =
           [&mirror_nodes,
            &mirror_boundary,
@@ -215,47 +216,48 @@ Graph Gradient(Graph src) {
            &node_ptr,
            &NodePtr2Str,
            &_create_mirror]
-          (const NodePtr& _node_ptr,
+          (const NodePtr& curr_node_ptr,
+           const NodePtr& prev_node_ptr,
            const unsigned mirror_depth) {
 
             // return directly if the mirror function returns false
-            if (!mirror_fun(*_node_ptr, mirror_depth)) {
-              if (mirror_boundary.find(_node_ptr) ==
+            if (!mirror_fun(*curr_node_ptr, mirror_depth)) {
+              if (mirror_boundary.find(curr_node_ptr) ==
                   mirror_boundary.end()) {
                 // record the current node as one of the node boundaries
-                mirror_boundary.insert(_node_ptr);
+                mirror_boundary.insert(curr_node_ptr);
               }
-              return _node_ptr;
+              return curr_node_ptr;
             }
             // return the mirrored node
             // if it has already been created before
             std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
-            if ((mirror_node_iter = mirror_nodes.find(_node_ptr))
-                != mirror_nodes.end()) {
+            if ((mirror_node_iter = mirror_nodes.find(curr_node_ptr)) != 
+                 mirror_nodes.end()) {
               return mirror_node_iter->second;
             }
             // create a new node and insert it into `mirror_nodes`
             NodePtr new_node = Node::Create();
-            *new_node = *_node_ptr;
-            new_node->attrs.name = _node_ptr->attrs.name +
-                    "_mirror_at_" + node_ptr->attrs.name;
+            *new_node = *curr_node_ptr;
+            new_node->attrs.name = curr_node_ptr->attrs.name +
+                "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
 
-            const std::string& type = _node_ptr->attrs.op->name;
-
-            if (type != "LSTMNonLinBlock") {
-              for (NodeEntry &e : new_node->inputs) {
-                e.node = _create_mirror(e.node,
-                    mirror_depth + 1);
-              }
-              for (NodePtr &n : new_node->control_deps) {
-                n = _create_mirror(n,
-                    mirror_depth + 1);
-              }
+            for (NodeEntry &e : new_node->inputs) {
+              e.node = _create_mirror(e.node,
+                  curr_node_ptr,
+                  mirror_depth + 1);
             }
-            return mirror_nodes[_node_ptr] = new_node;
+            for (NodePtr &n : new_node->control_deps) {
+              n = _create_mirror(n,
+                  curr_node_ptr,
+                  mirror_depth + 1);
+            }
+            return mirror_nodes[curr_node_ptr] = new_node;
           };  // _create_mirror
-      _create_mirror(node_ptr, 0);
+      _create_mirror(node_ptr, nullptr, 0);
+
+      // start forward propagating from the mirror boundary to upstream nodes
 
       // if (!logged_mirror_path) {
       //   if (mirror_nodes.size() != 0) {
