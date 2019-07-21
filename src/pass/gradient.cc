@@ -146,6 +146,34 @@ Graph Gradient(Graph src) {
     }
   }
    */
+  // record the reference count of each node entry
+  // This data structure stores the same information with 
+  //   the `ref_count` variable in the `plan_memory` pass.
+  const IndexedGraph& idx = src.indexed_graph();
+  std::vector<uint32_t> entry_ref_count
+      (idx.num_node_entries(), 0);
+  static const OpMap<std::function<std::vector<uint32_t> (const NodeAttrs& attrs)>>& 
+      fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
+
+  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
+    const IndexedGraph::Node& inode = idx[nid];
+    if (inode.source->is_variable()) {
+      continue;
+    }
+    for (const IndexedGraph::NodeEntry& e : inode.inputs) {
+      ++entry_ref_count[idx.entry_id(e)];
+    }
+    if (fignore_inputs.count(inode.source->op()) != 0) {
+      std::vector<uint32_t> ignore_inputs = 
+          fignore_inputs[inode.source->op()](inode.source->attrs);
+      for (const uint32_t i : ignore_inputs) {
+        --entry_ref_count[idx.entry_id(inode.inputs[i])];
+      }
+    }  // if (ignore_inputs)
+  }  // for nid ∈ [0, idx.num_nodes())
+  for (const IndexedGraph::NodeEntry& e : idx.outputs()) {
+    ++entry_ref_count[idx.entry_id(e)];
+  }
 
   std::unordered_map<NodePtr,
       std::unordered_map<NodePtr, NodePtr>
@@ -231,24 +259,16 @@ Graph Gradient(Graph src) {
           };  // _create_mirror
       _create_mirror(node_ptr, 0);
 
-      // if (!logged_mirror_path) {
-      //   if (node_ptr->op() == nullptr || 
-      //       node_ptr->op()->name == "_plus_scalar" ||
-      //       node_ptr->op()->name == "elementwise_add" ||
-      //       node_ptr->op()->name == "broadcast_add" ||
-      //       node_ptr->op()->name == "broadcast_sub" ||
-      //       node_ptr->op()->name == "broadcast_not_equal") {
-      //     continue;
-      //   }
-      //   if (mirror_nodes.size() != 0) {
-      //     LOG(INFO) << "List of Mirrored Nodes @ Node "
-      //               << NodePtr2Str(node_ptr);
-      //   }
-      //   for (const std::pair<NodePtr, NodePtr> &nn_pair
-      //       : mirror_nodes) {
-      //     LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
-      //   }
-      // }  // if (!logged_mirror_path)
+      if (!logged_mirror_path) {
+        if (mirror_nodes.size() != 0) {
+          LOG(INFO) << "List of Mirrored Nodes @ Node "
+                    << NodePtr2Str(node_ptr);
+        }
+        for (const std::pair<NodePtr, NodePtr> &nn_pair
+            : mirror_nodes) {
+          LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
+        }
+      }  // if (!logged_mirror_path)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
 
