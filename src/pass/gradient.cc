@@ -268,7 +268,7 @@ Graph Gradient(Graph src) {
       //   is strictly greater than the released storage.
       // This requires information on the tensor shape, data type, and entry reference count.
       for (const NodePtr& n : mirror_boundary) {
-
+        
       }  // for n ∈ mirror_boundary
 
       // if (!logged_mirror_path) {
@@ -452,6 +452,8 @@ NNVM_REGISTER_PASS(Gradient)
 .describe("Return a gradient graph of src.attrs[\"ys\"] wrt src.attrs[\"xs\"]")
 .set_body(Gradient)
 .set_change_graph(true)
+// .depend_graph_attr("dtype")
+// .depend_graph_attr("shape")
 .depend_graph_attr("grad_ys")
 .depend_graph_attr("grad_xs")
 .depend_graph_attr("grad_ys_out_grad");
