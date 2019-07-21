@@ -259,6 +259,9 @@ Graph Gradient(Graph src) {
       _create_mirror(node_ptr, nullptr, 0);
 
       // start forward propagating from the mirror boundary to upstream nodes
+      for (const NodePtr& n : mirror_boundary) {
+
+      }  // for n ∈ mirror_boundary
 
       // if (!logged_mirror_path) {
       //   if (mirror_nodes.size() != 0) {
