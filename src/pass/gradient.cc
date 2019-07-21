@@ -13,7 +13,7 @@ namespace nnvm {
 namespace pass {
 namespace {
 
-static bool logged_mirror_path = false;
+// static bool logged_mirror_path = false;
 
 // default aggregate gradient function
 // require operator __zero__ and __ewise_sum__ to be presented.
@@ -190,7 +190,7 @@ Graph Gradient(Graph src) {
     for (const NodePtr& node_ptr : topo_order) {
       std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
           mirror_map_modified[node_ptr];
-
+      std::unordered_set<NodePtr> mirror_boundary;  // boundary of mirror nodes;
       /// @brief  Create a mirror node of the given `NodePtr`.
       /// @param  _node_ptr      node to be considered
       /// @param  mirror_depth   the mirror depth
@@ -208,6 +208,7 @@ Graph Gradient(Graph src) {
            const NodePtr&,
            const unsigned)> _create_mirror =
           [&mirror_nodes,
+           &mirror_boundary,
            &mirror_fun,
            &mirror_ops,
           //  &mirror_depth_stats,
@@ -219,6 +220,11 @@ Graph Gradient(Graph src) {
 
             // return directly if the mirror function returns false
             if (!mirror_fun(*_node_ptr, mirror_depth)) {
+              if (mirror_boundary.find(_node_ptr) ==
+                  mirror_boundary.end()) {
+                // record the current node as one of the node boundaries
+                mirror_boundary.insert(_node_ptr);
+              }
               return _node_ptr;
             }
             // return the mirrored node
@@ -251,20 +257,20 @@ Graph Gradient(Graph src) {
           };  // _create_mirror
       _create_mirror(node_ptr, 0);
 
-      if (!logged_mirror_path) {
-        if (mirror_nodes.size() != 0) {
-          LOG(INFO) << "List of Mirrored Nodes @ Node "
-                    << NodePtr2Str(node_ptr);
-        }
-        for (const std::pair<NodePtr, NodePtr> &nn_pair
-            : mirror_nodes) {
-          LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
-        }
-      }  // if (!logged_mirror_path)
+      // if (!logged_mirror_path) {
+      //   if (mirror_nodes.size() != 0) {
+      //     LOG(INFO) << "List of Mirrored Nodes @ Node "
+      //               << NodePtr2Str(node_ptr);
+      //   }
+      //   for (const std::pair<NodePtr, NodePtr> &nn_pair
+      //       : mirror_nodes) {
+      //     LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
+      //   }
+      // }  // if (!logged_mirror_path)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
 
-  logged_mirror_path = true;  // mirror path is logged for only once
+  // logged_mirror_path = true;  // mirror path is logged for only once
 
   if (mirror_ops.size() != 0) {
     LOG(INFO) << "You have enabled gradient mirroring.";
