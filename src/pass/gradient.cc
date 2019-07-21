@@ -259,6 +259,14 @@ Graph Gradient(Graph src) {
       _create_mirror(node_ptr, nullptr, 0);
 
       // start forward propagating from the mirror boundary to upstream nodes
+      // If we forward propagate certain computation node, we can potentially
+      //   1. release the storage allocated for the inputs
+      //   2. reduce  the overhead of mirroring
+      // However, at the same time, this also comes with the cost of 
+      //   1. allocate extra storage for the outputs
+      // Hence, the forward propagation stops when the newly allocated storage 
+      //   is strictly greater than the released storage.
+      // This requires information on the tensor shape, data type, and entry reference count.
       for (const NodePtr& n : mirror_boundary) {
 
       }  // for n ∈ mirror_boundary
