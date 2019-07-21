@@ -267,9 +267,9 @@ Graph Gradient(Graph src) {
       // Hence, the forward propagation stops when the newly allocated storage 
       //   is strictly greater than the released storage.
       // This requires information on the tensor shape, data type, and entry reference count.
-      for (const NodePtr& n : mirror_boundary) {
+      // for (const NodePtr& n : mirror_boundary) {
         
-      }  // for n ∈ mirror_boundary
+      // }  // for n ∈ mirror_boundary
 
       // if (!logged_mirror_path) {
       //   if (mirror_nodes.size() != 0) {
