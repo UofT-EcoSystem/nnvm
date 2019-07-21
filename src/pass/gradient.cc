@@ -59,14 +59,18 @@ struct GradEntry {
   bool need_attr_hint{true};
 };
 
+/// @brief Auxiliary function that builds a backward graph
+///          based on the provided mirror function.
+Graph _buildBackwardGraph(
+    const Graph& src, const std::vector<NodeEntry>& xs,
+    const std::vector<NodePtr>& topo_order,
+    std::unordered_map<Node*, 
+      std::vector<GradEntry> > output_grads,
+    const std::unordered_map<NodePtr,
+      std::unordered_map<NodePtr, NodePtr> >& mirror_map_modified);
+
 Graph Gradient(Graph src) {
   using nnvm::FGradient;
-  using MirrorFun = std::function<bool(
-      const Node& node,
-      const unsigned mirror_depth)>;
-  using AttrHintFun = std::function<NodeEntry(
-      const NodeEntry& src,
-      const NodeEntry& like)>;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
       << "Gradient require grad_ys to be presented.";
@@ -80,28 +84,16 @@ Graph Gradient(Graph src) {
       src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
   const std::vector<NodeEntry>& xs =
       src.GetAttr<std::vector<NodeEntry> >("grad_xs");
-  using AggFun = std::function<NodeEntry (std::vector<NodeEntry>&& inputs)>;
-  AggFun agg_fun = DefaultAggregateGradient;
-  if (src.attrs.count("grad_aggregate_fun") != 0) {
-    agg_fun = src.GetAttr<AggFun>("grad_aggregate_fun");
-  }
+
+  using MirrorFun = std::function<bool(
+      const Node& node,
+      const unsigned mirror_depth)>;
   MirrorFun mirror_fun = nullptr;
   if (src.attrs.count("grad_mirror_fun") != 0) {
     mirror_fun = src.GetAttr<MirrorFun>("grad_mirror_fun");
   }
-  AttrHintFun attr_hint_fun = nullptr;
-  if (src.attrs.count("attr_hint_fun") != 0) {
-    attr_hint_fun = src.GetAttr<AttrHintFun>("attr_hint_fun");
-  }
-  std::vector<const Op*> zero_ops;
-  if (src.attrs.count("zero_ops") != 0) {
-    zero_ops = src.GetAttr<std::vector<const Op*> >("zero_ops");
-  }
-  const Op* copy_op = (src.attrs.count("copy_op") != 0) ?
-      Op::Get(src.GetAttr<std::string>("copy_op")) :
-      nullptr;
 
-  // topo sort
+  // initialize topological order and output gradients
   std::vector<NodePtr> topo_order;
   std::unordered_map<Node*, std::vector<GradEntry> > output_grads;
 
@@ -152,7 +144,7 @@ Graph Gradient(Graph src) {
   const IndexedGraph& idx = src.indexed_graph();
   std::vector<uint32_t> entry_ref_count
       (idx.num_node_entries(), 0);
-  static const OpMap<std::function<std::vector<uint32_t> (const NodeAttrs& attrs)>>& 
+  static const OpMap<std::function<std::vector<uint32_t> (const NodeAttrs& attrs)> >& 
       fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
 
   for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
@@ -196,7 +188,7 @@ Graph Gradient(Graph src) {
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
-      std::unordered_map<NodePtr, NodePtr> & mirror_nodes =
+      std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
           mirror_map_modified[node_ptr];
 
       /// @brief  Create a mirror node of the given `NodePtr`.
@@ -290,6 +282,38 @@ Graph Gradient(Graph src) {
     // }
   }
 
+  return _buildBackwardGraph(src, xs,
+      topo_order, output_grads,
+      mirror_map_modified);
+}
+
+Graph _buildBackwardGraph(
+    const Graph& src, const std::vector<NodeEntry>& xs,
+    const std::vector<NodePtr>& topo_order,
+    std::unordered_map<Node*, 
+      std::vector<GradEntry> > output_grads,
+    const std::unordered_map<NodePtr,
+      std::unordered_map<NodePtr, NodePtr> >& mirror_map_modified) {
+  using AttrHintFun = std::function<NodeEntry(
+      const NodeEntry& src,
+      const NodeEntry& like)>;
+  AttrHintFun attr_hint_fun = nullptr;
+  if (src.attrs.count("attr_hint_fun") != 0) {
+    attr_hint_fun = src.GetAttr<AttrHintFun>("attr_hint_fun");
+  }
+  using AggFun = std::function<NodeEntry(std::vector<NodeEntry>&& inputs)>;
+  AggFun agg_fun = DefaultAggregateGradient;
+  if (src.attrs.count("grad_aggregate_fun") != 0) {
+    agg_fun = src.GetAttr<AggFun>("grad_aggregate_fun");
+  }
+  std::vector<const Op*> zero_ops;
+  if (src.attrs.count("zero_ops") != 0) {
+    zero_ops = src.GetAttr<std::vector<const Op*> >("zero_ops");
+  }
+  const Op* copy_op = (src.attrs.count("copy_op") != 0) ?
+      Op::Get(src.GetAttr<std::string>("copy_op")) :
+      nullptr;
+
   // traverse backward
   static auto& grad_fun_map = Op::GetAttr<FGradient>("FGradient");
   static auto& finfer_shape = Op::GetAttr<FInferShape>("FInferShape");
@@ -312,8 +336,9 @@ Graph Gradient(Graph src) {
       // NodePtr fwd_node = (mirror_map.size() == 0 ? ptr : mirror_map.at(ptr.get()));
       NodePtr fwd_node = ptr;
       if (mirror_map_modified.size() != 0) {
-        std::unordered_map<NodePtr, NodePtr> &mirror_nodes = mirror_map_modified[ptr];
-        std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
+        const std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
+            mirror_map_modified.at(ptr);
+        std::unordered_map<NodePtr, NodePtr>::const_iterator mirror_node_iter;
         if ((mirror_node_iter = mirror_nodes.find(ptr))
             != mirror_nodes.end()) {
           fwd_node = mirror_node_iter->second;
