@@ -13,8 +13,6 @@ namespace nnvm {
 namespace pass {
 namespace {
 
-// static bool logged_mirror_path = false;
-
 // default aggregate gradient function
 // require operator __zero__ and __ewise_sum__ to be presented.
 NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
@@ -332,25 +330,13 @@ Graph Gradient(Graph src) {
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
 
-      // if (!logged_mirror_path) {
-      // if (mirror_nodes.size() != 0) {
-      //   LOG(INFO) << "List of Mirrored Nodes @ Node "
-      //             << NodePtr2Str(node_ptr);
-      //   for (const NodePtr& n : mirror_path) {
-      //     LOG(INFO) << "\t" << NodePtr2Str(n);
-      //   }  // for (n ∈ mirror_path)
-      // }  // if (mirror_nodes.size() != 0)
-      // }  // if (!logged_mirror_path)
-
       // update the `longest_mirror_path`
       if (mirror_path.size() > longest_mirror_path.first) {
-        longest_mirror_path.first = mirror_path.size();
+        longest_mirror_path.first  = mirror_path.size();
         longest_mirror_path.second = mirror_path;
       }
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
-
-  // logged_mirror_path = true;  // mirror path is logged for only once
 
   if (mirror_ops.size() != 0) {
     LOG(INFO) << "You have enabled gradient mirroring.";
