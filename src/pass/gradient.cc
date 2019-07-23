@@ -283,6 +283,7 @@ Graph Gradient(Graph src) {
       for (const NodePtr& mirror_node : mirror_path) {
         // (1) for forward propagating, all the inputs must be in the non-mirrored graph
         // (2) compare the benefits and costs of forward propagating
+        //       (in terms of both runtime and memory)
         // (3) remove the node from the `mirror_nodes` and `mirror_path`,
         //       and update corresponding node references accordingly
         bool all_non_mirrored_inputs = true;
@@ -294,21 +295,19 @@ Graph Gradient(Graph src) {
             break;
           }
         }  // for (e ∈ mirror_node->inputs)
-        for (const NodePtr& n : mirror_node->control_deps) {
-          if (mirror_nodes.find(n) !=
-              mirror_nodes.end()) {
-            all_non_mirrored_inputs = false;
-            break;
-          }
-        }  // for (n ∈ mirror_node->control_deps)
+        if (all_non_mirrored_inputs) {
+          for (const NodePtr& n : mirror_node->control_deps) {
+            if (mirror_nodes.find(n) !=
+                mirror_nodes.end()) {
+              all_non_mirrored_inputs = false;
+              break;
+            }
+          }  // for (n ∈ mirror_node->control_deps)
+        }  // if (all_non_mirrored_inputs)
 
         if (all_non_mirrored_inputs) {
-          LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
-                    << "has all inputs as non-mirror nodes";
-        } else {
-          LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
-                    << "has some mirrored inputs";
-        }
+          
+        }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
 
