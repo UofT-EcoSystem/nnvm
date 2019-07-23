@@ -203,10 +203,12 @@ Graph Gradient(Graph src) {
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
+      // `mirror_nodes` maps the nodes in the original source graph to the mirrored nodes
       std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
           mirror_map_modified[node_ptr];
-      std::vector<NodePtr> mirror_path;  // path of mirroring
-      // with children nodes always coming before parent
+      // `mirror_path` stores the path of mirroring, with 
+      //   the children nodes always coming before parent
+      std::vector<NodePtr> mirror_path;
 
       /// @brief  Create a mirror node of the given `NodePtr`.
       /// @param  _node_ptr      node to be considered
@@ -275,9 +277,41 @@ Graph Gradient(Graph src) {
       // Hence, the forward propagation stops when the newly allocated storage 
       //   is strictly greater than the released storage.
       // This requires information on the tensor shape, data type, and entry reference count.
-      // for (const NodePtr& n : mirror_boundary) {
-        
-      // }  // for n ∈ mirror_boundary
+      for (const NodePtr& mirror_node : mirror_path) {
+        // (1) for forward propagating, all the inputs must be in the non-mirrored graph
+        // (2) compare the benefits and costs of forward propagating
+        // (3) remove the node from the `mirror_nodes` and `mirror_path`,
+        //       and update corresponding node references accordingly
+        bool all_non_mirrored_inputs = true;
+
+        for (const NodeEntry& e : mirror_node->inputs) {
+          if (mirror_nodes.find(e.node) != 
+              mirror_nodes.end()) {
+            all_non_mirrored_inputs = false;
+            LOG(FATAL) << NodePtr2Str(mirror_node);
+            break;
+          }
+        }  // for (e ∈ mirror_node->inputs)
+        if (all_non_mirrored_inputs) {
+          for (const NodePtr& n : mirror_node->control_deps) {
+            if (mirror_nodes.find(n) !=
+                mirror_nodes.end()) {
+              all_non_mirrored_inputs = false;
+              LOG(FATAL) << NodePtr2Str(mirror_node);
+              break;
+            }
+          }  // for (n ∈ mirror_node->control_deps)
+        }  // if (all_non_mirrored_inputs)
+
+        // if (all_non_mirrored_inputs) {
+        //   LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
+        //             << "has all inputs as non-mirror nodes";
+        // } else {
+        //   LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
+        //             << "has some mirrored inputs";
+        // }
+      }  // for (n ∈ mirror_path)
+      // keep iterating until no changes to the mirror path has happened
 
       // if (!logged_mirror_path) {
         // if (mirror_nodes.size() != 0) {
