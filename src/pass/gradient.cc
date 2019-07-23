@@ -312,8 +312,9 @@ Graph Gradient(Graph src) {
               
               for (const IndexedGraph::NodeEntry& ientry : inode.inputs) {
                 if (entry_id == raw_src_grad_idx.entry_id(ientry)) {
-                  
-                }  // 
+                  LOG(INFO) << "\t\t" << raw_src_grad_idx[ientry.node_id]
+                                                         .source->attrs.name;
+                }
               }  // for (e ∈ inode.inputs)
             }  // for (nid ∈ raw_src_grad_idx.num_nodes())
           }  // for (e ∈ mirror_node->inputs)
