@@ -6,6 +6,7 @@
  */
 #include <nnvm/pass.h>
 #include <nnvm/op_attr_types.h>
+#include <nnvm/pass_functions.h>
 #include <algorithm>
 #include <functional>
 
@@ -139,34 +140,6 @@ Graph Gradient(Graph src) {
     }
   }
    */
-  // record the reference count of each node entry
-  // This data structure stores the same information with 
-  //   the `ref_count` variable in the `plan_memory` pass.
-  const IndexedGraph& idx = src.indexed_graph();
-  std::vector<uint32_t> entry_ref_count
-      (idx.num_node_entries(), 0);
-  static const OpMap<std::function<std::vector<uint32_t> (const NodeAttrs& attrs)> >& 
-      fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
-
-  for (uint32_t nid = 0; nid < idx.num_nodes(); ++nid) {
-    const IndexedGraph::Node& inode = idx[nid];
-    if (inode.source->is_variable()) {
-      continue;
-    }
-    for (const IndexedGraph::NodeEntry& e : inode.inputs) {
-      ++entry_ref_count[idx.entry_id(e)];
-    }
-    if (fignore_inputs.count(inode.source->op()) != 0) {
-      std::vector<uint32_t> ignore_inputs = 
-          fignore_inputs[inode.source->op()](inode.source->attrs);
-      for (const uint32_t i : ignore_inputs) {
-        --entry_ref_count[idx.entry_id(inode.inputs[i])];
-      }
-    }  // if (ignore_inputs)
-  }  // for nid ∈ [0, idx.num_nodes())
-  for (const IndexedGraph::NodeEntry& e : idx.outputs()) {
-    ++entry_ref_count[idx.entry_id(e)];
-  }
 
   std::unordered_map<NodePtr,
       std::unordered_map<NodePtr, NodePtr>
@@ -186,6 +159,47 @@ Graph Gradient(Graph src) {
                 "Op=" + ptr->attrs.op->name + ")";
     }
   };  // NodePtr2Str
+
+  // create a source backward graph, with the mirror map being empty
+  nnvm::Graph raw_src_grad = _buildBackwardGraph(src, xs,
+          topo_order, output_grads, 
+          mirror_map_modified);  // with no manipulation on mirroring
+  // record the reference count of each node entry
+  // This data structure stores the same information with 
+  //   the `ref_count` variable in the `plan_memory` pass.
+  const IndexedGraph& raw_src_grad_idx = raw_src_grad.indexed_graph();
+  std::vector<uint32_t> raw_src_grad_entry_ref_count
+      (raw_src_grad_idx.num_node_entries(), 0);
+  static const OpMap<std::function<std::vector<uint32_t> (const NodeAttrs& attrs)> >& 
+      fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
+
+  for (uint32_t nid = 0; nid < raw_src_grad_idx.num_nodes(); ++nid) {
+    const IndexedGraph::Node& inode = raw_src_grad_idx[nid];
+    if (inode.source->is_variable()) {
+      continue;  // variable nodes are ignored
+    }
+    for (const IndexedGraph::NodeEntry& e : inode.inputs) {
+      // increase the entry reference count if it is referenced by an operator input
+      ++raw_src_grad_entry_ref_count
+       [raw_src_grad_idx.entry_id(e)];
+    }
+    if (fignore_inputs.count(inode.source->op()) != 0) {
+      std::vector<uint32_t> ignore_inputs = 
+          fignore_inputs[inode.source->op()](inode.source->attrs);
+      for (const uint32_t i : ignore_inputs) {
+        // decrease the entry reference count if it belongs to the ignored inputs
+        --raw_src_grad_entry_ref_count
+         [raw_src_grad_idx.entry_id(inode.inputs[i])];
+      }
+    }  // if (ignore_inputs)
+  }  // for nid ∈ [0, idx.num_nodes())
+  for (const IndexedGraph::NodeEntry& e : raw_src_grad_idx.outputs()) {
+    // increase the entry reference count if it is referenced by an operator output
+    // Note that based on this implementation, most node entries 
+    //   will have a reference count of at least 2.
+    ++raw_src_grad_entry_ref_count
+     [raw_src_grad_idx.entry_id(e)];
+  }
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
