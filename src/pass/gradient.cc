@@ -118,7 +118,7 @@ Graph Gradient(Graph src) {
         << "because it is unreachable from the outputs.";
   }
   /*
-  // construct mirror reduece memory strategy if needed
+  // construct mirror reduce memory strategy if needed
   std::unordered_map<Node*, NodePtr> mirror_map;
   if (mirror_fun != nullptr) {
     for (const NodePtr& n : topo_order) {
@@ -135,18 +135,21 @@ Graph Gradient(Graph src) {
         mirror_map[n.get()] = std::move(new_node);
       } else {
         mirror_map[n.get()] = n;
-      }
-    }
-  }
+      }  // if (mirror_fun(*n))
+    }  // for (n ∈ topo_order)
+  }  // if (mirror_fun != nullptr)
    */
 
   std::unordered_map<NodePtr,
       std::unordered_map<NodePtr, NodePtr>
       > mirror_map_modified;
-  // record the list of mirrored operators, for debugging and logging purpose
+  // record the list of mirrored operators,
+  // for debugging and logging purpose
   std::unordered_set<std::string> mirror_ops;
-  // record the statistics on mirror depth
-  // std::map<unsigned, unsigned> mirror_depth_stats;
+  // record the longest mirror path
+  std::pair<std::size_t, std::vector<NodePtr> > longest_mirror_path;
+
+  longest_mirror_path.first = 0;
 
   std::function<std::string(const NodePtr&)> NodePtr2Str =
       [](const NodePtr& ptr) {
@@ -338,6 +341,12 @@ Graph Gradient(Graph src) {
       //   }  // for (n ∈ mirror_path)
       // }  // if (mirror_nodes.size() != 0)
       // }  // if (!logged_mirror_path)
+
+      // update the `longest_mirror_path`
+      if (mirror_path.size() > longest_mirror_path.first) {
+        longest_mirror_path.first = mirror_path.size();
+        longest_mirror_path.second = mirror_path;
+      }
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
 
@@ -350,13 +359,13 @@ Graph Gradient(Graph src) {
     for (const std::string &opcode : mirror_ops) {
       LOG(INFO) << "\t\t" << opcode;
     }
-    // LOG(INFO) << "\t""Given below is "
-    //           << "the list of mirror depths:";
-    // for (const std::pair<unsigned, unsigned> mirror_depth_cnt_pair
-    //     : mirror_depth_stats) {
-    //   LOG(INFO) << "\t\t" << mirror_depth_cnt_pair.first << " : "
-    //                       << mirror_depth_cnt_pair.second;
-    // }
+  }
+  if (longest_mirror_path.first != 0) {
+    LOG(INFO) << "\t""Given below is "
+              << "the longest mirror path:";
+    for (const NodePtr& n : longest_mirror_path.second) {
+      LOG(INFO) << "\t\t" << NodePtr2Str(n);
+    }
   }
 
   return _buildBackwardGraph(src, xs,
