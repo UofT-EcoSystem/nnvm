@@ -147,30 +147,30 @@ inline Graph Gradient(
     std::function<NodeEntry(const NodeEntry& src, const NodeEntry &like)>
     attr_hint_fun = nullptr,
     std::vector<const Op*> zero_ops = std::vector<const Op*>(),
-    std::string copy_op_str = std::string()) {
+    std::string copy_op_str = std::string(),
+    ShapeVector in_arg_shapes = std::vector<TShape>(),
+    DTypeVector in_arg_dtypes = std::vector<int>()) {
+    // CHANGE(BackwardMirroring) 
   graph.attrs["grad_ys"] = std::make_shared<any>(std::move(ys));
-
   graph.attrs["grad_xs"] = std::make_shared<any>(std::move(xs));
   graph.attrs["grad_ys_out_grad"] = std::make_shared<any>(std::move(ys_out_grad));
-  if (aggregate_fun != nullptr) {
-    graph.attrs["grad_aggregate_fun"] = std::make_shared<any>(aggregate_fun);
-  }
 
-  if (mirror_fun != nullptr) {
-    graph.attrs["grad_mirror_fun"] = std::make_shared<any>(mirror_fun);
-  }
+  if (aggregate_fun != nullptr)
+    graph.attrs["grad_aggregate_fun"] = 
+        std::make_shared<any>(aggregate_fun);
+  if (mirror_fun != nullptr)
+    graph.attrs["grad_mirror_fun"] = 
+        std::make_shared<any>(mirror_fun);
+  if (attr_hint_fun != nullptr)
+    graph.attrs["attr_hint_fun"] = 
+        std::make_shared<any>(attr_hint_fun);
 
-  if (attr_hint_fun != nullptr) {
-    graph.attrs["attr_hint_fun"] = std::make_shared<any>(attr_hint_fun);
-  }
-
-  if (zero_ops.size()) {
-    graph.attrs["zero_ops"] = std::make_shared<any>(std::move(zero_ops));
-  }
-
-  if (copy_op_str != std::string()) {
-      graph.attrs["copy_op"] = std::make_shared<any>(std::move(copy_op_str));
-  }
+  if (zero_ops.size())
+    graph.attrs["zero_ops"] = 
+        std::make_shared<any>(std::move(zero_ops));
+  if (copy_op_str != std::string())
+    graph.attrs["copy_op"] = 
+        std::make_shared<any>(std::move(copy_op_str));
 
   return ApplyPass(std::move(graph), "Gradient");
 }
