@@ -305,8 +305,17 @@ Graph Gradient(Graph src) {
         if (all_non_mirrored_inputs) {
           for (const NodeEntry& e : mirror_node->inputs) {
             const uint32_t entry_id = raw_src_grad_idx.entry_id(e);
-            LOG(INFO) << "Node Entry Reference Count : "
+            LOG(INFO) << "\t""Node Entry Reference Count : "
                       << raw_src_grad_entry_ref_count[entry_id];
+            for (uint32_t nid = 0; nid < raw_src_grad_idx.num_nodes(); ++nid) {
+              const IndexedGraph::Node& inode = raw_src_grad_idx[nid];
+              
+              for (const IndexedGraph::NodeEntry& ientry : inode.inputs) {
+                if (entry_id == raw_src_grad_idx.entry_id(ientry)) {
+                  
+                }  // 
+              }  // for (e ∈ inode.inputs)
+            }  // for (nid ∈ raw_src_grad_idx.num_nodes())
           }  // for (e ∈ mirror_node->inputs)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
