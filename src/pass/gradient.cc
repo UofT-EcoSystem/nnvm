@@ -180,25 +180,22 @@ Graph Gradient(Graph src) {
     }
     for (const IndexedGraph::NodeEntry& e : inode.inputs) {
       // increase the entry reference count if it is referenced by an operator input
-      ++raw_src_grad_entry_ref_count
-       [raw_src_grad_idx.entry_id(e)];
+      ++raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)];
     }
     if (fignore_inputs.count(inode.source->op()) != 0) {
       std::vector<uint32_t> ignore_inputs = 
           fignore_inputs[inode.source->op()](inode.source->attrs);
       for (const uint32_t i : ignore_inputs) {
         // decrease the entry reference count if it belongs to the ignored inputs
-        --raw_src_grad_entry_ref_count
-         [raw_src_grad_idx.entry_id(inode.inputs[i])];
+        --raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(inode.inputs[i])];
       }
     }  // if (ignore_inputs)
   }  // for nid ∈ [0, idx.num_nodes())
   for (const IndexedGraph::NodeEntry& e : raw_src_grad_idx.outputs()) {
-    // increase the entry reference count if it is referenced by an operator output
-    // Note that based on this implementation, most node entries 
-    //   will have a reference count of at least 2.
-    ++raw_src_grad_entry_ref_count
-     [raw_src_grad_idx.entry_id(e)];
+    // increase the entry reference count if it is set as the entire graph's outputs
+    // This is used for prevent the graph outputs 
+    //   from being put back to the storage pool.
+    ++raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)];
   }
 
   if (mirror_fun != nullptr) {
@@ -306,7 +303,11 @@ Graph Gradient(Graph src) {
         }  // if (all_non_mirrored_inputs)
 
         if (all_non_mirrored_inputs) {
-          
+          for (const NodeEntry& e : mirror_node->inputs) {
+            const uint32_t entry_id = raw_src_grad_idx.entry_id(e);
+            LOG(INFO) << "Node Entry Reference Count : "
+                      << raw_src_grad_entry_ref_count[entry_id];
+          }  // for (e ∈ mirror_node->inputs)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
