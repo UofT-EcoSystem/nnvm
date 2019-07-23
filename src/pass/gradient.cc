@@ -62,7 +62,8 @@ struct GradEntry {
 /// @brief Auxiliary function that builds a backward graph
 ///          based on the provided mirror function.
 Graph _buildBackwardGraph(
-    const Graph& src, const std::vector<NodeEntry>& xs,
+    const Graph& src,
+    const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<Node*, 
       std::vector<GradEntry> > output_grads,
@@ -74,16 +75,16 @@ Graph Gradient(Graph src) {
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
       << "Gradient require grad_ys to be presented.";
-  CHECK_NE(src.attrs.count("grad_ys_out_grad"), 0U)
-      << "Gradient require grad_ys_out_grad to be presented.";
   CHECK_NE(src.attrs.count("grad_xs"), 0U)
       << "Gradient require grad_xs to be presented.";
+  CHECK_NE(src.attrs.count("grad_ys_out_grad"), 0U)
+      << "Gradient require grad_ys_out_grad to be presented.";
   const std::vector<NodeEntry>& ys =
       src.GetAttr<std::vector<NodeEntry> >("grad_ys");
-  const std::vector<NodeEntry>& ys_out_grad =
-      src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
   const std::vector<NodeEntry>& xs =
       src.GetAttr<std::vector<NodeEntry> >("grad_xs");
+  const std::vector<NodeEntry>& ys_out_grad =
+      src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
 
   using MirrorFun = std::function<bool(
       const Node& node,
@@ -190,7 +191,9 @@ Graph Gradient(Graph src) {
     for (const NodePtr& node_ptr : topo_order) {
       std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
           mirror_map_modified[node_ptr];
-      std::unordered_set<NodePtr> mirror_boundary;  // boundary of mirror nodes;
+      std::vector<NodePtr> mirror_path;  // path of mirroring
+      // with children nodes always coming before parent
+
       /// @brief  Create a mirror node of the given `NodePtr`.
       /// @param  _node_ptr      node to be considered
       /// @param  mirror_depth   the mirror depth
@@ -206,57 +209,48 @@ Graph Gradient(Graph src) {
       ///         Finally a new node is created and inserted into `mirror_nodes`.
       std::function<NodePtr(
            const NodePtr&,
-           const NodePtr&,
            const unsigned)> _create_mirror =
           [&mirror_nodes,
-           &mirror_boundary,
+           &mirror_path,
            &mirror_fun,
            &mirror_ops,
           //  &mirror_depth_stats,
            &node_ptr,
            &NodePtr2Str,
            &_create_mirror]
-          (const NodePtr& curr_node_ptr,
-           const NodePtr& prev_node_ptr,
+          (const NodePtr& _node_ptr,
            const unsigned mirror_depth) {
 
             // return directly if the mirror function returns false
-            if (!mirror_fun(*curr_node_ptr, mirror_depth)) {
+            if (!mirror_fun(*_node_ptr, mirror_depth)) {
               // record the parent node as one of the node bounaries,
               //   under the condition that it is not `nullptr`
-              if (mirror_boundary.find(prev_node_ptr) ==
-                  mirror_boundary.end()) {
-                mirror_boundary.insert(prev_node_ptr);
-              }
-              return curr_node_ptr;
+              return _node_ptr;
             }
             // return the mirrored node
             // if it has already been created before
             std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
-            if ((mirror_node_iter = mirror_nodes.find(curr_node_ptr)) != 
+            if ((mirror_node_iter = mirror_nodes.find(_node_ptr)) != 
                  mirror_nodes.end()) {
               return mirror_node_iter->second;
             }
             // create a new node and insert it into `mirror_nodes`
             NodePtr new_node = Node::Create();
-            *new_node = *curr_node_ptr;
-            new_node->attrs.name = curr_node_ptr->attrs.name +
-                "_mirror_at_" + node_ptr->attrs.name;
+            *new_node = *_node_ptr;
+            new_node->attrs.name = _node_ptr->attrs.name +
+                    "_mirror_at_" + node_ptr->attrs.name;
             mirror_ops.insert(new_node->attrs.op->name);
 
             for (NodeEntry& e : new_node->inputs) {
-              e.node = _create_mirror(e.node,
-                  curr_node_ptr,
-                  mirror_depth + 1);
+              e.node = _create_mirror(e.node, mirror_depth + 1);
             }
             for (NodePtr& n : new_node->control_deps) {
-              n = _create_mirror(n,
-                  curr_node_ptr,
-                  mirror_depth + 1);
+              n = _create_mirror(n, mirror_depth + 1);
             }
-            return mirror_nodes[curr_node_ptr] = new_node;
+            mirror_path.push_back(new_node);
+            return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
-      _create_mirror(node_ptr, nullptr, 0);
+      _create_mirror(node_ptr, 0);
 
       // start forward propagating from the mirror boundary to upstream nodes
       // If we forward propagate certain computation node, we can potentially
@@ -272,14 +266,13 @@ Graph Gradient(Graph src) {
       // }  // for n ∈ mirror_boundary
 
       // if (!logged_mirror_path) {
-      //   if (mirror_nodes.size() != 0) {
-      //     LOG(INFO) << "List of Mirrored Nodes @ Node "
-      //               << NodePtr2Str(node_ptr);
-      //   }
-      //   for (const std::pair<NodePtr, NodePtr> &nn_pair
-      //       : mirror_nodes) {
-      //     LOG(INFO) << "\t" << NodePtr2Str(nn_pair.first);
-      //   }
+        // if (mirror_nodes.size() != 0) {
+        //   LOG(INFO) << "List of Mirrored Nodes @ Node "
+        //             << NodePtr2Str(node_ptr);
+        // }
+        // for (const NodePtr& n : mirror_path) {
+        //   LOG(INFO) << "\t" << NodePtr2Str(n);
+        // }
       // }  // if (!logged_mirror_path)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
@@ -308,7 +301,8 @@ Graph Gradient(Graph src) {
 }
 
 Graph _buildBackwardGraph(
-    const Graph& src, const std::vector<NodeEntry>& xs,
+    const Graph& src,
+    const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<Node*, 
       std::vector<GradEntry> > output_grads,
