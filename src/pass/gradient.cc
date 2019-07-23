@@ -6,7 +6,6 @@
  */
 #include <nnvm/pass.h>
 #include <nnvm/op_attr_types.h>
-#include <nnvm/pass_functions.h>
 #include <algorithm>
 #include <functional>
 
@@ -190,13 +189,20 @@ Graph Gradient(Graph src) {
         --raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(inode.inputs[i])];
       }
     }  // if (ignore_inputs)
-  }  // for nid ∈ [0, idx.num_nodes())
+  }  // for (nid ∈ [0, idx.num_nodes())
   for (const IndexedGraph::NodeEntry& e : raw_src_grad_idx.outputs()) {
     // increase the entry reference count if it is set as the entire graph's outputs
     // This is used for prevent the graph outputs 
     //   from being put back to the storage pool.
     ++raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)];
-  }
+  }  // for (eid ∈ [0, idx.num_outputs()))
+
+  src.attrs["shape_attr_key"] = 
+      std::make_shared<any>(std::string("__shape__"));
+  src.attrs["dtype_attr_key"] = 
+      std::make_shared<any>(std::string("__dtype__"));
+  src = ApplyPass(std::move(src), "InferShape");
+  src = ApplyPass(std::move(src), "InferType");
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
@@ -304,32 +310,33 @@ Graph Gradient(Graph src) {
 
         if (all_non_mirrored_inputs) {
           for (const NodeEntry& e : mirror_node->inputs) {
-            const uint32_t entry_id = raw_src_grad_idx.entry_id(e);
-            LOG(INFO) << "\t""Node Entry Reference Count : "
-                      << raw_src_grad_entry_ref_count[entry_id];
-            for (uint32_t nid = 0; nid < raw_src_grad_idx.num_nodes(); ++nid) {
-              const IndexedGraph::Node& inode = raw_src_grad_idx[nid];
+            // const uint32_t entry_id = raw_src_grad_idx.entry_id(e);
+
+            // LOG(INFO) << "\t""Node Entry Reference Count : "
+            //           << raw_src_grad_entry_ref_count[entry_id];
+            // for (uint32_t nid = 0; nid < raw_src_grad_idx.num_nodes(); ++nid) {
+            //   const IndexedGraph::Node& inode = raw_src_grad_idx[nid];
               
-              for (const IndexedGraph::NodeEntry& ientry : inode.inputs) {
-                if (entry_id == raw_src_grad_idx.entry_id(ientry)) {
-                  LOG(INFO) << "\t\t" << raw_src_grad_idx[ientry.node_id]
-                                                         .source->attrs.name;
-                }
-              }  // for (e ∈ inode.inputs)
-            }  // for (nid ∈ raw_src_grad_idx.num_nodes())
+            //   for (const IndexedGraph::NodeEntry& ientry : inode.inputs) {
+            //     if (entry_id == raw_src_grad_idx.entry_id(ientry)) {
+            //       LOG(INFO) << "\t\t" << raw_src_grad_idx[ientry.node_id]
+            //                                              .source->attrs.name;
+            //     }
+            //   }  // for (e ∈ inode.inputs)
+            // }  // for (nid ∈ raw_src_grad_idx.num_nodes())
           }  // for (e ∈ mirror_node->inputs)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
 
       // if (!logged_mirror_path) {
-      if (mirror_nodes.size() != 0) {
-        LOG(INFO) << "List of Mirrored Nodes @ Node "
-                  << NodePtr2Str(node_ptr);
-        for (const NodePtr& n : mirror_path) {
-          LOG(INFO) << "\t" << NodePtr2Str(n);
-        }  // for (n ∈ mirror_path)
-      }  // if (mirror_nodes.size() != 0)
+      // if (mirror_nodes.size() != 0) {
+      //   LOG(INFO) << "List of Mirrored Nodes @ Node "
+      //             << NodePtr2Str(node_ptr);
+      //   for (const NodePtr& n : mirror_path) {
+      //     LOG(INFO) << "\t" << NodePtr2Str(n);
+      //   }  // for (n ∈ mirror_path)
+      // }  // if (mirror_nodes.size() != 0)
       // }  // if (!logged_mirror_path)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
