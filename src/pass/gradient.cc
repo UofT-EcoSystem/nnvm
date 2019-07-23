@@ -263,7 +263,10 @@ Graph Gradient(Graph src) {
             for (NodePtr& n : new_node->control_deps) {
               n = _create_mirror(n, mirror_depth + 1);
             }
-            mirror_path.push_back(new_node);
+            // store the source nodes in the `mirror_path` as 
+            //   they will be further used to index into
+            //   the `mirror_nodes`
+            mirror_path.push_back(_node_ptr);
             return mirror_nodes[_node_ptr] = new_node;
           };  // _create_mirror
       _create_mirror(node_ptr, 0);
@@ -288,39 +291,35 @@ Graph Gradient(Graph src) {
           if (mirror_nodes.find(e.node) != 
               mirror_nodes.end()) {
             all_non_mirrored_inputs = false;
-            LOG(FATAL) << NodePtr2Str(mirror_node);
             break;
           }
         }  // for (e ∈ mirror_node->inputs)
-        if (all_non_mirrored_inputs) {
-          for (const NodePtr& n : mirror_node->control_deps) {
-            if (mirror_nodes.find(n) !=
-                mirror_nodes.end()) {
-              all_non_mirrored_inputs = false;
-              LOG(FATAL) << NodePtr2Str(mirror_node);
-              break;
-            }
-          }  // for (n ∈ mirror_node->control_deps)
-        }  // if (all_non_mirrored_inputs)
+        for (const NodePtr& n : mirror_node->control_deps) {
+          if (mirror_nodes.find(n) !=
+              mirror_nodes.end()) {
+            all_non_mirrored_inputs = false;
+            break;
+          }
+        }  // for (n ∈ mirror_node->control_deps)
 
-        // if (all_non_mirrored_inputs) {
-        //   LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
-        //             << "has all inputs as non-mirror nodes";
-        // } else {
-        //   LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
-        //             << "has some mirrored inputs";
-        // }
+        if (all_non_mirrored_inputs) {
+          LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
+                    << "has all inputs as non-mirror nodes";
+        } else {
+          LOG(INFO) << "Node " << NodePtr2Str(mirror_node) << " "
+                    << "has some mirrored inputs";
+        }
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
 
       // if (!logged_mirror_path) {
-        // if (mirror_nodes.size() != 0) {
-        //   LOG(INFO) << "List of Mirrored Nodes @ Node "
-        //             << NodePtr2Str(node_ptr);
-        // }
-        // for (const NodePtr& n : mirror_path) {
-        //   LOG(INFO) << "\t" << NodePtr2Str(n);
-        // }
+      if (mirror_nodes.size() != 0) {
+        LOG(INFO) << "List of Mirrored Nodes @ Node "
+                  << NodePtr2Str(node_ptr);
+        for (const NodePtr& n : mirror_path) {
+          LOG(INFO) << "\t" << NodePtr2Str(n);
+        }  // for (n ∈ mirror_path)
+      }  // if (mirror_nodes.size() != 0)
       // }  // if (!logged_mirror_path)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
