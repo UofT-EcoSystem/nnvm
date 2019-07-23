@@ -150,10 +150,12 @@ inline Graph Gradient(
     std::string copy_op_str = std::string(),
     ShapeVector in_arg_shapes = std::vector<TShape>(),
     DTypeVector in_arg_dtypes = std::vector<int>()) {
-    // CHANGE(BackwardMirroring) 
+    // CHANGE(BackwardMirroring) Added shapes and dtypes of graph input arguments.
   graph.attrs["grad_ys"] = std::make_shared<any>(std::move(ys));
   graph.attrs["grad_xs"] = std::make_shared<any>(std::move(xs));
   graph.attrs["grad_ys_out_grad"] = std::make_shared<any>(std::move(ys_out_grad));
+  graph.attrs["shape_inputs"] = std::make_shared<any>(std::move(in_arg_shapes));
+  graph.attrs["dtype_inputs"] = std::make_shared<any>(std::move(in_arg_dtypes));
 
   if (aggregate_fun != nullptr)
     graph.attrs["grad_aggregate_fun"] = 
