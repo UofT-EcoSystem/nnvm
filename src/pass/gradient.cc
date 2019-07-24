@@ -346,19 +346,44 @@ Graph Gradient(Graph src) {
             // OR EQUAL TO the allocated storage, 
             // then it is a good indication that 
             // `src_node` should better NOT be mirrored
+            const NodePtr& mirrored_src_node = src_mirror_map[src_node];
 
+            for (std::pair<const NodePtr, NodePtr>& src_mirror_nn_pair : src_mirror_map) {
+              NodePtr& mirror_node = src_mirror_nn_pair.second;
 
-
+              // map back to the dependencies of the mirrored source node 
+              // back to the source node in the original graph
+              for (NodeEntry& e : mirror_node->inputs) {
+                if (e.node == mirrored_src_node) {
+                  e.node = src_node;
+                }
+              }  // for (e ∈ mirror_node->inputs)
+              for (NodePtr& n : mirror_node->control_deps) {
+                if (n == mirrored_src_node) {
+                  n = src_node;
+                }
+              }  // for (n ∈ mirror_node->control_deps)
+            }  // for (src_mirror_nn_pair ∈ src_mirror_map)
             src_mirror_map.erase(src_node);
           }  // if (released_storage >= allocated_storage)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
 
-      // update the `longest_mirror_path`
-      if (mirror_path.size() > longest_mirror_path.first) {
-        longest_mirror_path.first  = mirror_path.size();
-        longest_mirror_path.second = mirror_path;
+      std::vector<NodePtr> mirror_path_trimed;
+
+      for (const NodePtr& n : mirror_path) {
+        if ((src_mirror_map.find(n)) == 
+             src_mirror_map.end()) {
+          continue;
+        }
+        mirror_path_trimed.push_back(n);
+      }
+
+      // update `longest_mirror_path`
+      if (mirror_path_trimed.size() > longest_mirror_path.first) {
+        longest_mirror_path.first  = mirror_path_trimed.size();
+        longest_mirror_path.second = mirror_path_trimed;
       }
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
