@@ -6,6 +6,7 @@
  */
 #include <nnvm/pass.h>
 #include <nnvm/op_attr_types.h>
+#include <nnvm/graph_attr_types.h>
 #include <algorithm>
 #include <functional>
 
@@ -200,10 +201,14 @@ Graph Gradient(Graph src) {
 
   src.attrs["shape_attr_key"] = 
       std::make_shared<any>(std::string("__shape__"));
+  // Should we only inference the shape variable as the storage pass always assume 32-bit?
   src.attrs["dtype_attr_key"] = 
       std::make_shared<any>(std::string("__dtype__"));
   src = ApplyPass(std::move(src), "InferShape");
   src = ApplyPass(std::move(src), "InferType");
+
+  const ShapeVector& src_shape = src.GetAttr<ShapeVector>("shape");
+  const DTypeVector& src_dtype = src.GetAttr<DTypeVector>("dtype");
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
@@ -310,8 +315,21 @@ Graph Gradient(Graph src) {
         }  // if (all_non_mirrored_inputs)
 
         if (all_non_mirrored_inputs) {
+          const IndexedGraph& idx = src.indexed_graph();
+          // compute the released storage (benefits) and allocated storage (costs)
+          // of forward propagating the node `mirror_node`
+          std::size_t released_storage = 0, allocated_storage = 0;
+
           for (const NodeEntry& e : mirror_node->inputs) {
-            // const uint32_t entry_id = raw_src_grad_idx.entry_id(e);
+            if (raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)] == 1) {
+              // if the reference count of the entry is strictly equal to 1,
+              // this implies that the storage allocated for that edge 
+              // can be released back to the storage pool
+
+              // Similar to the `plan_memory` pass, we always assume 
+              //   tensors to be in 32-bit dtypes.
+              released_storage += src_shape[idx.entry_id(e)].Size() * 4;
+            }  // if (raw_src_grad_entry_ref_count[entry_id] == 1)
 
             // LOG(INFO) << "\t""Node Entry Reference Count : "
             //           << raw_src_grad_entry_ref_count[entry_id];
