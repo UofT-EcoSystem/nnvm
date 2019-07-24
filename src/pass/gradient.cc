@@ -372,15 +372,15 @@ Graph Gradient(Graph src) {
 
       std::vector<NodePtr> mirror_path_trimed;
 
-      if (src_mirror_map.size() > 0) {
-        LOG(INFO) << "Mirror Path (Trimed): ";
-      }
+      // if (src_mirror_map.size() > 0) {
+      //   LOG(INFO) << "Mirror Path (Trimed): ";
+      // }
       for (const NodePtr& n : mirror_path) {
         if ((src_mirror_map.find(n)) == 
              src_mirror_map.end()) {
           continue;
         }
-        LOG(INFO) << "\t" << NodePtr2Str(n);
+        // LOG(INFO) << "\t" << NodePtr2Str(n);
         mirror_path_trimed.push_back(n);
       }
 
