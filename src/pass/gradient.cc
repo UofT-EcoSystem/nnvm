@@ -208,7 +208,6 @@ Graph Gradient(Graph src) {
   src = ApplyPass(std::move(src), "InferType");
 
   const ShapeVector& src_shape = src.GetAttr<ShapeVector>("shape");
-  const DTypeVector& src_dtype = src.GetAttr<DTypeVector>("dtype");
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
@@ -330,20 +329,25 @@ Graph Gradient(Graph src) {
               //   tensors to be in 32-bit dtypes.
               released_storage += src_shape[idx.entry_id(e)].Size() * 4;
             }  // if (raw_src_grad_entry_ref_count[entry_id] == 1)
-
-            // LOG(INFO) << "\t""Node Entry Reference Count : "
-            //           << raw_src_grad_entry_ref_count[entry_id];
-            // for (uint32_t nid = 0; nid < raw_src_grad_idx.num_nodes(); ++nid) {
-            //   const IndexedGraph::Node& inode = raw_src_grad_idx[nid];
-              
-            //   for (const IndexedGraph::NodeEntry& ientry : inode.inputs) {
-            //     if (entry_id == raw_src_grad_idx.entry_id(ientry)) {
-            //       LOG(INFO) << "\t\t" << raw_src_grad_idx[ientry.node_id]
-            //                                              .source->attrs.name;
-            //     }
-            //   }  // for (e ∈ inode.inputs)
-            // }  // for (nid ∈ raw_src_grad_idx.num_nodes())
           }  // for (e ∈ mirror_node->inputs)
+
+          for (uint32_t oidx = 0; oidx < mirror_node->num_outputs(); ++oidx) {
+            if (raw_src_grad_entry_ref_count[
+                  raw_src_grad_idx.entry_id(
+                    raw_src_grad_idx.node_id(mirror_node.get()), oidx)
+                  ] == 0) {
+              continue;  // ignore outputs that are unused, although it is very unlikely
+            }
+            allocated_storage += src_shape[idx.entry_id(idx.node_id(mirror_node.get()), oidx)].Size() * 4;
+          }  // for (oidx ∈ [0, mirror_node->num_outputs()))
+
+          if (released_storage >= allocated_storage) {
+            // if amount of released storage is greater than 
+            // OR EQUAL TO the allocated storage, 
+            // then it is a good indication that 
+            // `mirror_node` should better NOT be mirrored
+            
+          }  // if (released_storage >= allocated_storage)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
       // keep iterating until no changes to the mirror path has happened
