@@ -211,8 +211,8 @@ Graph Gradient(Graph src) {
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
-      // `mirror_nodes` maps the nodes in the original source graph to the mirrored nodes
-      std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
+      // `src_mirror_map` maps the nodes in the original source graph to the mirrored nodes
+      std::unordered_map<NodePtr, NodePtr>& src_mirror_map =
           mirror_map_modified[node_ptr];
       // `mirror_path` stores the path of mirroring, with 
       //   the children nodes always coming before parent
@@ -234,7 +234,7 @@ Graph Gradient(Graph src) {
       std::function<NodePtr(
            const NodePtr&,
            const unsigned)> _create_mirror =
-          [&mirror_nodes,
+          [&src_mirror_map,
            &mirror_path,
            &mirror_fun,
            &mirror_ops,
@@ -254,8 +254,8 @@ Graph Gradient(Graph src) {
             // return the mirrored node
             // if it has already been created before
             std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
-            if ((mirror_node_iter = mirror_nodes.find(_node_ptr)) != 
-                 mirror_nodes.end()) {
+            if ((mirror_node_iter = src_mirror_map.find(_node_ptr)) != 
+                src_mirror_map.end()) {
               return mirror_node_iter->second;
             }
             // create a new node and insert it into `mirror_nodes`
@@ -275,7 +275,7 @@ Graph Gradient(Graph src) {
             //   they will be further used to index into
             //   the `mirror_nodes`
             mirror_path.push_back(_node_ptr);
-            return mirror_nodes[_node_ptr] = new_node;
+            return src_mirror_map[_node_ptr] = new_node;
           };  // _create_mirror
       _create_mirror(node_ptr, 0);
 
@@ -292,21 +292,20 @@ Graph Gradient(Graph src) {
         // (1) for forward propagating, all the inputs must be in the non-mirrored graph
         // (2) compare the benefits and costs of forward propagating
         //       (in terms of both runtime and memory)
-        // (3) remove the node from the `mirror_nodes` and `mirror_path`,
-        //       and update corresponding node references accordingly
+        // (3) remove the node from the `mirror_nodes`, and update references accordingly
         bool all_non_mirrored_inputs = true;
 
         for (const NodeEntry& e : mirror_node->inputs) {
-          if (mirror_nodes.find(e.node) != 
-              mirror_nodes.end()) {
+          if (src_mirror_map.find(e.node) != 
+              src_mirror_map.end()) {
             all_non_mirrored_inputs = false;
             break;
           }
         }  // for (e ∈ mirror_node->inputs)
         if (all_non_mirrored_inputs) {
           for (const NodePtr& n : mirror_node->control_deps) {
-            if (mirror_nodes.find(n) !=
-                mirror_nodes.end()) {
+            if (src_mirror_map.find(n) !=
+                src_mirror_map.end()) {
               all_non_mirrored_inputs = false;
               break;
             }
@@ -346,7 +345,10 @@ Graph Gradient(Graph src) {
             // OR EQUAL TO the allocated storage, 
             // then it is a good indication that 
             // `mirror_node` should better NOT be mirrored
-            
+
+
+
+            src_mirror_map.erase(mirror_node);
           }  // if (released_storage >= allocated_storage)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
@@ -431,12 +433,12 @@ Graph _buildBackwardGraph(
       // NodePtr fwd_node = (mirror_map.size() == 0 ? ptr : mirror_map.at(ptr.get()));
       NodePtr fwd_node = ptr;
       if (mirror_map_modified.size() != 0) {
-        const std::unordered_map<NodePtr, NodePtr>& mirror_nodes =
+        const std::unordered_map<NodePtr, NodePtr>& src_mirror_map =
             mirror_map_modified.at(ptr);
-        std::unordered_map<NodePtr, NodePtr>::const_iterator mirror_node_iter;
-        if ((mirror_node_iter = mirror_nodes.find(ptr))
-            != mirror_nodes.end()) {
-          fwd_node = mirror_node_iter->second;
+        std::unordered_map<NodePtr, NodePtr>::const_iterator src_mirror_map_iter;
+        if ((src_mirror_map_iter = src_mirror_map.find(ptr)) !=
+             src_mirror_map.end()) {
+          fwd_node = src_mirror_map_iter->second;
         }
       }
 
