@@ -288,37 +288,37 @@ Graph Gradient(Graph src) {
       // Hence, the forward propagation stops when the newly allocated storage 
       //   is strictly greater than the released storage.
       // This requires information on the tensor shape, data type, and entry reference count.
-      for (const NodePtr& mirror_node : mirror_path) {
+      for (const NodePtr& src_node : mirror_path) {
         // (1) for forward propagating, all the inputs must be in the non-mirrored graph
         // (2) compare the benefits and costs of forward propagating
         //       (in terms of both runtime and memory)
-        // (3) remove the node from the `mirror_nodes`, and update references accordingly
+        // (3) update references accordingly, and remove the node from the `src_mirror_map`
         bool all_non_mirrored_inputs = true;
 
-        for (const NodeEntry& e : mirror_node->inputs) {
+        for (const NodeEntry& e : src_node->inputs) {
           if (src_mirror_map.find(e.node) != 
               src_mirror_map.end()) {
             all_non_mirrored_inputs = false;
             break;
           }
-        }  // for (e ∈ mirror_node->inputs)
+        }  // for (e ∈ src_node->inputs)
         if (all_non_mirrored_inputs) {
-          for (const NodePtr& n : mirror_node->control_deps) {
+          for (const NodePtr& n : src_node->control_deps) {
             if (src_mirror_map.find(n) !=
                 src_mirror_map.end()) {
               all_non_mirrored_inputs = false;
               break;
             }
-          }  // for (n ∈ mirror_node->control_deps)
+          }  // for (n ∈ src_node->control_deps)
         }  // if (all_non_mirrored_inputs)
 
         if (all_non_mirrored_inputs) {
           const IndexedGraph& idx = src.indexed_graph();
           // compute the released storage (benefits) and allocated storage (costs)
-          // of forward propagating the node `mirror_node`
+          // of forward propagating the node `src_node`
           std::size_t released_storage = 0, allocated_storage = 0;
 
-          for (const NodeEntry& e : mirror_node->inputs) {
+          for (const NodeEntry& e : src_node->inputs) {
             if (raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)] == 1) {
               // if the reference count of the entry is strictly equal to 1,
               // this implies that the storage allocated for that edge 
@@ -328,27 +328,28 @@ Graph Gradient(Graph src) {
               //   tensors to be in 32-bit dtypes.
               released_storage += src_shape[idx.entry_id(e)].Size() * 4;
             }  // if (raw_src_grad_entry_ref_count[entry_id] == 1)
-          }  // for (e ∈ mirror_node->inputs)
+          }  // for (e ∈ src_node->inputs)
 
-          for (uint32_t oidx = 0; oidx < mirror_node->num_outputs(); ++oidx) {
+          for (uint32_t oidx = 0; oidx < src_node->num_outputs(); ++oidx) {
             if (raw_src_grad_entry_ref_count[
                   raw_src_grad_idx.entry_id(
-                    raw_src_grad_idx.node_id(mirror_node.get()), oidx)
-                  ] == 0) {
+                    raw_src_grad_idx.node_id(src_node.get()), oidx
+                  )
+                ] == 0) {
               continue;  // ignore outputs that are unused, although it is very unlikely
             }
-            allocated_storage += src_shape[idx.entry_id(idx.node_id(mirror_node.get()), oidx)].Size() * 4;
-          }  // for (oidx ∈ [0, mirror_node->num_outputs()))
+            allocated_storage += src_shape[idx.entry_id(idx.node_id(src_node.get()), oidx)].Size() * 4;
+          }  // for (oidx ∈ [0, src_node->num_outputs()))
 
           if (released_storage >= allocated_storage) {
             // if amount of released storage is greater than 
             // OR EQUAL TO the allocated storage, 
             // then it is a good indication that 
-            // `mirror_node` should better NOT be mirrored
+            // `src_node` should better NOT be mirrored
 
 
 
-            src_mirror_map.erase(mirror_node);
+            src_mirror_map.erase(src_node);
           }  // if (released_storage >= allocated_storage)
         }  // if (all_non_mirrored_inputs)
       }  // for (n ∈ mirror_path)
