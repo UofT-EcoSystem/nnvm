@@ -86,8 +86,8 @@ Graph Gradient(Graph src) {
       src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
 
   using MirrorFun = std::function<bool(
-      const Node& node,
-      const unsigned mirror_depth)>;
+      const NodePtr&,
+      const NodePtr&)>;
   MirrorFun mirror_fun = nullptr;
   if (src.attrs.count("grad_mirror_fun") != 0) {
     mirror_fun = src.GetAttr<MirrorFun>("grad_mirror_fun");
@@ -233,7 +233,7 @@ Graph Gradient(Graph src) {
       ///         Finally a new node is created and inserted into `mirror_nodes`.
       std::function<NodePtr(
            const NodePtr&,
-           const unsigned)> _create_mirror =
+           const NodePtr&)> _create_mirror =
           [&src_mirror_map,
            &mirror_path,
            &mirror_fun,
@@ -243,10 +243,10 @@ Graph Gradient(Graph src) {
            &NodePtr2Str,
            &_create_mirror]
           (const NodePtr& _node_ptr,
-           const unsigned mirror_depth) {
+           const NodePtr& parent_node_ptr) {
 
             // return directly if the mirror function returns false
-            if (!mirror_fun(*_node_ptr, mirror_depth)) {
+            if (!mirror_fun(_node_ptr, parent_node_ptr)) {
               // record the parent node as one of the node bounaries,
               //   under the condition that it is not `nullptr`
               return _node_ptr;
@@ -266,10 +266,10 @@ Graph Gradient(Graph src) {
             mirror_ops.insert(new_node->attrs.op->name);
 
             for (NodeEntry& e : new_node->inputs) {
-              e.node = _create_mirror(e.node, mirror_depth + 1);
+              e.node = _create_mirror(e.node, _node_ptr);
             }
             for (NodePtr& n : new_node->control_deps) {
-              n = _create_mirror(n, mirror_depth + 1);
+              n = _create_mirror(n, _node_ptr);
             }
             // store the source nodes in the `mirror_path` as 
             //   they will be further used to index into
@@ -277,7 +277,7 @@ Graph Gradient(Graph src) {
             mirror_path.push_back(_node_ptr);
             return src_mirror_map[_node_ptr] = new_node;
           };  // _create_mirror
-      _create_mirror(node_ptr, 0);
+      _create_mirror(node_ptr, nullptr);
 
       // start forward propagating from the mirror boundary to upstream nodes
       // If we forward propagate certain computation node, we can potentially
@@ -475,6 +475,16 @@ Graph _buildBackwardGraph(
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
         input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
+        // map the control dependency of the backward 
+        // This step is needed to eliminate operators 
+        for (NodeEntry& input_grad_entry : input_grads) {
+          for (NodePtr& control_dep : 
+               input_grad_entry.node->control_deps) {
+            if (control_dep == fwd_node) {
+              control_dep = ptr;
+            }
+          }  // for (control_dep ∈ input_grad.control_deps)
+        }  // for (input_grad_entry ∈ input_grads)
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {

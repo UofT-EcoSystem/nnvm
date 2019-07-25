@@ -341,6 +341,25 @@ Graph PlanMemory(Graph ret) {
       if (inode.source->is_variable()) continue;
       for (const auto& e : inode.inputs) {
         ++ref_count[idx.entry_id(e)];
+
+        // if (idx[e.node_id].source->attrs.name == 
+        //     "encoder_birnn_reverse_l0_t10_nonlin_block") {
+        //   LOG(INFO) << "Encoder Non-Lin Block Oedge " << e.index << " "
+        //             << "is referenced by "
+        //             << inode.source->attrs.name;
+        // }
+        // if (idx[e.node_id].source->attrs.name == 
+        //     "decoder_rnn_l0_t8_i2h") {
+        //   LOG(INFO) << "I2H Oedge " << e.index << " "
+        //             << "is referenced by "
+        //             << inode.source->attrs.name;
+        // }
+        // if (idx[e.node_id].source->attrs.name == 
+        //     "decoder_rnn_l0_t8_nonlin_block") {
+        //   LOG(INFO) << "Decoder Non-Lin Block Oedge " << e.index << " "
+        //             << "is referenced by "
+        //             << inode.source->attrs.name;
+        // }
       }
       // no dataflow dependency is needed for those are ignored.
       // revoke the dependency counter.
