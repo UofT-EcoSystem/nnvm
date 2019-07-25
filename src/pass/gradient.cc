@@ -476,7 +476,12 @@ Graph _buildBackwardGraph(
       if (grad_fun_map.count(ptr->op())) {
         input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
         // map the control dependency of the backward 
-        // This step is needed to eliminate operators 
+        // This step is needed to eliminate operators that only require inputs 
+        //   for the backward pass (e.g., fully-connected layers).
+        // Note that although the outputs of the dead nodes can be immediately
+        //   released back to the storage pool, as outputs of layers such as
+        //   fully-connected are usually huge, they cannot be easily reused,
+        //   resulting in huge increase in overall memory footprint.
         for (NodeEntry& input_grad_entry : input_grads) {
           for (NodePtr& control_dep : 
                input_grad_entry.node->control_deps) {
