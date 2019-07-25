@@ -343,14 +343,8 @@ Graph PlanMemory(Graph ret) {
         ++ref_count[idx.entry_id(e)];
 
         // if (idx[e.node_id].source->attrs.name == 
-        //     "encoder_birnn_reverse_l0_t10_nonlin_block") {
+        //     "encoder_rnn_l0_t7_nonlin_block") {
         //   LOG(INFO) << "Encoder Non-Lin Block Oedge " << e.index << " "
-        //             << "is referenced by "
-        //             << inode.source->attrs.name;
-        // }
-        // if (idx[e.node_id].source->attrs.name == 
-        //     "decoder_rnn_l0_t8_i2h") {
-        //   LOG(INFO) << "I2H Oedge " << e.index << " "
         //             << "is referenced by "
         //             << inode.source->attrs.name;
         // }
