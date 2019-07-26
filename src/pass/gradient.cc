@@ -343,9 +343,9 @@ Graph Gradient(Graph src) {
 
           if (released_storage >= allocated_storage) {
             // if amount of released storage is greater than 
-            // OR EQUAL TO the allocated storage, 
-            // then it is a good indication that 
-            // `src_node` should better NOT be mirrored
+            //   OR EQUAL TO the allocated storage, 
+            //   then it is a good indication that 
+            //   `src_node` should better NOT be mirrored
             const NodePtr& mirrored_src_node = src_mirror_map[src_node];
 
             for (std::pair<const NodePtr, NodePtr>& src_mirror_nn_pair : src_mirror_map) {
