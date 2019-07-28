@@ -5,6 +5,7 @@
  * This code code was modified based on mxnet codebase by Min Lin
  */
 #include <nnvm/pass.h>
+#include <nnvm/pass_functions.h>
 #include <nnvm/op_attr_types.h>
 #include <nnvm/graph_attr_types.h>
 #include <algorithm>
@@ -256,8 +257,9 @@ Graph _buildBackwardGraph(
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<Node*, 
       std::vector<GradEntry> > output_grads,
-    const std::unordered_map<NodePtr,
-      std::unordered_map<NodePtr, NodePtr> >& mirror_map_modified);
+    const std::unordered_map<NodePtr, 
+        std::pair<NodePtr, 
+                  NodePtr> >& mirror_map);
 
 Graph Gradient(Graph src) {
   using nnvm::FGradient;
@@ -275,8 +277,7 @@ Graph Gradient(Graph src) {
   const std::vector<NodeEntry>& ys_out_grad =
       src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
 
-  using MirrorFun = std::function<bool(
-      const NodePtr&,
+  using MirrorFun = std::function<MirrorType(
       const NodePtr&)>;
   MirrorFun mirror_fun = nullptr;
   if (src.attrs.count("grad_mirror_fun") != 0) {
@@ -308,8 +309,8 @@ Graph Gradient(Graph src) {
   }
 
   std::unordered_map<NodePtr,
-      std::unordered_map<NodePtr, NodePtr>
-      > mirror_map_modified;
+      std::pair<NodePtr,
+                NodePtr> > mirror_map;
   // record the list of mirrored operators,
   // for debugging and logging purpose
   std::unordered_set<std::string> mirror_ops;
@@ -332,7 +333,7 @@ Graph Gradient(Graph src) {
   // create a source backward graph, with the mirror map being empty
   nnvm::Graph raw_src_grad = _buildBackwardGraph(src, xs,
           topo_order, output_grads, 
-          mirror_map_modified);  // with no manipulation on mirroring
+          mirror_map);  // with no manipulation on mirroring
   // record the reference count of each node entry
   // This data structure stores the same information with 
   //   the `ref_count` variable in the `plan_memory` pass.
@@ -379,184 +380,81 @@ Graph Gradient(Graph src) {
 
   if (mirror_fun != nullptr) {
     for (const NodePtr& node_ptr : topo_order) {
-      // `src_mirror_map` maps the nodes in the original source graph to the mirrored nodes
-      std::unordered_map<NodePtr, NodePtr>& src_mirror_map =
-          mirror_map_modified[node_ptr];
+      std::pair<NodePtr, NodePtr>&
+          mirror_node_io_pair =
+          mirror_map[node_ptr];
+      MirrorType mirror_type = mirror_fun(node_ptr);
+
       // `mirror_path` stores the path of mirroring, with 
       //   the children nodes always coming before parent
       std::vector<NodePtr> mirror_path;
 
-      /// @brief  Create a mirror node of the given `NodePtr`.
-      /// @param  _node_ptr      node to be considered
-      /// @param  mirror_depth   the mirror depth
-      ///        (This corresponds to the number of recursive calls made.
-      ///         The `mirror_depth` needs to be restricted to limit 
-      ///           the performance overhead.
-      ///         The optimal maximum, however, still remains to be discovered.)
-      /// @return If `_node_ptr` CANNOT pass the mirror function,
-      ///           it is directly returned;
-      ///         Otherwise `mirror_nodes` is checked first to see whether
-      ///           or not a mirror node has been previously
-      ///           created mirroring `_node_ptr`;
-      ///         Finally a new node is created and inserted into `mirror_nodes`.
-      std::function<NodePtr(
-           const NodePtr&,
-           const NodePtr&)> _create_mirror =
-          [&src_mirror_map,
-           &mirror_path,
-           &mirror_fun,
-           &mirror_ops,
-          //  &mirror_depth_stats,
-           &node_ptr,
-           &NodePtr2Str,
-           &_create_mirror]
-          (const NodePtr& _node_ptr,
-           const NodePtr& parent_node_ptr) {
+      if (mirror_type == MirrorType::kNone) {
+        mirror_node_io_pair.first  = node_ptr;
+        mirror_node_io_pair.second = node_ptr;
+      } else {
+        NodePtr mirror_node = Node::Create();
+        bool all_non_mirror_inputs = true;
 
-            // return directly if the mirror function returns false
-            if (!mirror_fun(_node_ptr, parent_node_ptr)) {
-              // record the parent node as one of the node bounaries,
-              //   under the condition that it is not `nullptr`
-              return _node_ptr;
-            }
-            // return the mirrored node
-            // if it has already been created before
-            std::unordered_map<NodePtr, NodePtr>::iterator mirror_node_iter;
-            if ((mirror_node_iter = src_mirror_map.find(_node_ptr)) != 
-                src_mirror_map.end()) {
-              return mirror_node_iter->second;
-            }
-            // create a new node and insert it into `mirror_nodes`
-            NodePtr new_node = Node::Create();
-            *new_node = *_node_ptr;
-            new_node->attrs.name = _node_ptr->attrs.name +
-                    "_mirror_at_" + node_ptr->attrs.name;
-            mirror_ops.insert(new_node->attrs.op->name);
+        *mirror_node = *node_ptr;
+         mirror_node->attrs.name += "_mirror";
 
-            for (NodeEntry& e : new_node->inputs) {
-              e.node = _create_mirror(e.node, _node_ptr);
-            }
-            for (NodePtr& n : new_node->control_deps) {
-              n = _create_mirror(n, _node_ptr);
-            }
-            // store the source nodes in the `mirror_path` as 
-            //   they will be further used to index into
-            //   the `mirror_nodes`
-            mirror_path.push_back(_node_ptr);
-            return src_mirror_map[_node_ptr] = new_node;
-          };  // _create_mirror
-      _create_mirror(node_ptr, nullptr);
-
-      // start forward propagating from the mirror boundary to upstream nodes
-      // If we forward propagate certain computation node, we can potentially
-      //   1. release the storage allocated for the inputs
-      //   2. reduce  the overhead of mirroring
-      // However, at the same time, this also comes with the cost of 
-      //   1. allocate extra storage for the outputs
-      // Hence, the forward propagation stops when the newly allocated storage 
-      //   is strictly greater than the released storage.
-      // This requires information on the tensor shape, data type, and entry reference count.
-      for (const NodePtr& src_node : mirror_path) {
-        // (1) for forward propagating, all the inputs must be in the non-mirrored graph
-        // (2) compare the benefits and costs of forward propagating
-        //       (in terms of both runtime and memory)
-        // (3) update references accordingly, and remove the node from the `src_mirror_map`
-        bool all_non_mirrored_inputs = true;
-
-        for (const NodeEntry& e : src_node->inputs) {
-          if (src_mirror_map.find(e.node) != 
-              src_mirror_map.end()) {
-            all_non_mirrored_inputs = false;
-            break;
+        for (NodeEntry& e : mirror_node->inputs) {
+          if (e.node != mirror_map.at(e.node).second) {
+            all_non_mirror_inputs = false;
           }
-        }  // for (e ∈ src_node->inputs)
-        if (all_non_mirrored_inputs) {
-          for (const NodePtr& n : src_node->control_deps) {
-            if (src_mirror_map.find(n) !=
-                src_mirror_map.end()) {
-              all_non_mirrored_inputs = false;
-              break;
+          e.node = mirror_map.at(e.node).second;
+        }  // for (e ∈ mirror_node->inputs)
+
+        for (NodePtr& n : mirror_node->control_deps) {
+          if (n != mirror_map.at(n).second) {
+            all_non_mirror_inputs = false;
+          }
+          n = mirror_map.at(n).second;
+        }  // for (d ∈ mirror_node->control_deps)
+
+        if (mirror_type == MirrorType::kInput) {
+          mirror_node_io_pair.first  = mirror_node;
+          mirror_node_io_pair.second = node_ptr;
+        } else {
+          // if (mirror_type == MirrorType::kBoth)
+          if (all_non_mirror_inputs) {
+            const IndexedGraph& idx = src.indexed_graph();
+            std::size_t released_storage = 0,
+                       allocated_storage = 0;
+
+            for (const NodeEntry& e : node_ptr->inputs) {
+              if (raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)] == 1) {
+                // if the reference count of the entry is strictly equal to 1,
+                // this implies that the storage allocated for that edge 
+                // can be released back to the storage pool
+
+                // Similar to the `plan_memory` pass, we always assume 
+                //   tensors to be in 32-bit dtypes.
+                released_storage += src_shape[idx.entry_id(e)].Size() * 4;
+              }  // if (raw_src_grad_entry_ref_count[entry_id] == 1)
+            }  // for (e ∈ src_node->inputs)
+
+            for (uint32_t oidx = 0; oidx < node_ptr->num_outputs(); ++oidx) {
+              if (raw_src_grad_entry_ref_count[
+                    raw_src_grad_idx.entry_id(
+                      raw_src_grad_idx.node_id(node_ptr.get()), oidx
+                    )
+                  ] == 0) {
+                continue;  // ignore outputs that are unused, although it is very unlikely
+              }
+              allocated_storage += src_shape[idx.entry_id(idx.node_id(node_ptr.get()), oidx)].Size() * 4;
+            }  // for (oidx ∈ [0, src_node->num_outputs()))
+            if (released_storage >= allocated_storage) {
+              mirror_node_io_pair.first  = node_ptr;
+              mirror_node_io_pair.second = node_ptr;
+              continue;
             }
-          }  // for (n ∈ src_node->control_deps)
-        }  // if (all_non_mirrored_inputs)
-
-        if (all_non_mirrored_inputs) {
-          const IndexedGraph& idx = src.indexed_graph();
-          // compute the released storage (benefits) and allocated storage (costs)
-          // of forward propagating the node `src_node`
-          std::size_t released_storage = 0, allocated_storage = 0;
-
-          for (const NodeEntry& e : src_node->inputs) {
-            if (raw_src_grad_entry_ref_count[raw_src_grad_idx.entry_id(e)] == 1) {
-              // if the reference count of the entry is strictly equal to 1,
-              // this implies that the storage allocated for that edge 
-              // can be released back to the storage pool
-
-              // Similar to the `plan_memory` pass, we always assume 
-              //   tensors to be in 32-bit dtypes.
-              released_storage += src_shape[idx.entry_id(e)].Size() * 4;
-            }  // if (raw_src_grad_entry_ref_count[entry_id] == 1)
-          }  // for (e ∈ src_node->inputs)
-
-          for (uint32_t oidx = 0; oidx < src_node->num_outputs(); ++oidx) {
-            if (raw_src_grad_entry_ref_count[
-                  raw_src_grad_idx.entry_id(
-                    raw_src_grad_idx.node_id(src_node.get()), oidx
-                  )
-                ] == 0) {
-              continue;  // ignore outputs that are unused, although it is very unlikely
-            }
-            allocated_storage += src_shape[idx.entry_id(idx.node_id(src_node.get()), oidx)].Size() * 4;
-          }  // for (oidx ∈ [0, src_node->num_outputs()))
-
-          if (released_storage >= allocated_storage) {
-            // if amount of released storage is greater than 
-            //   OR EQUAL TO the allocated storage, 
-            //   then it is a good indication that 
-            //   `src_node` should better NOT be mirrored
-            const NodePtr& mirrored_src_node = src_mirror_map[src_node];
-
-            for (std::pair<const NodePtr, NodePtr>& src_mirror_nn_pair : src_mirror_map) {
-              NodePtr& mirror_node = src_mirror_nn_pair.second;
-
-              // map back to the dependencies of the mirrored source node 
-              // back to the source node in the original graph
-              for (NodeEntry& e : mirror_node->inputs) {
-                if (e.node == mirrored_src_node) {
-                  e.node = src_node;
-                }
-              }  // for (e ∈ mirror_node->inputs)
-              for (NodePtr& n : mirror_node->control_deps) {
-                if (n == mirrored_src_node) {
-                  n = src_node;
-                }
-              }  // for (n ∈ mirror_node->control_deps)
-            }  // for (src_mirror_nn_pair ∈ src_mirror_map)
-            src_mirror_map.erase(src_node);
-          }  // if (released_storage >= allocated_storage)
-        }  // if (all_non_mirrored_inputs)
-      }  // for (n ∈ mirror_path)
-      // keep iterating until no changes to the mirror path has happened
-
-      std::vector<NodePtr> mirror_path_trimed;
-
-      // if (src_mirror_map.size() > 0) {
-      //   LOG(INFO) << "Mirror Path (Trimed): ";
-      // }
-      for (const NodePtr& n : mirror_path) {
-        if ((src_mirror_map.find(n)) == 
-             src_mirror_map.end()) {
-          continue;
-        }
-        // LOG(INFO) << "\t" << NodePtr2Str(n);
-        mirror_path_trimed.push_back(n);
-      }
-
-      // update `longest_mirror_path`
-      if (mirror_path_trimed.size() > longest_mirror_path.first) {
-        longest_mirror_path.first  = mirror_path_trimed.size();
-        longest_mirror_path.second = mirror_path_trimed;
-      }
+          }  // if (all_non_mirror_inputs)
+          mirror_node_io_pair.first  = mirror_node;
+          mirror_node_io_pair.second = mirror_node;
+        }  // if (mirror_type == MirrorType::kInput)
+      }  // if (mirror_type == MirrorType::kNone)
     }  // for (const NodePtr& node_ptr : topo_order)
   }  // if (mirror_fun != nullptr)
 
@@ -578,7 +476,7 @@ Graph Gradient(Graph src) {
 
   return _buildBackwardGraph(src, xs,
       topo_order, output_grads,
-      mirror_map_modified);
+      mirror_map);
 }
 
 Graph _buildBackwardGraph(
@@ -587,8 +485,9 @@ Graph _buildBackwardGraph(
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<Node*, 
       std::vector<GradEntry> > output_grads,
-    const std::unordered_map<NodePtr,
-      std::unordered_map<NodePtr, NodePtr> >& mirror_map_modified) {
+    const std::unordered_map<NodePtr, 
+        std::pair<NodePtr,
+                  NodePtr> >& mirror_map) {
   using AttrHintFun = std::function<NodeEntry(
       const NodeEntry& src,
       const NodeEntry& like)>;
@@ -630,14 +529,8 @@ Graph _buildBackwardGraph(
     if ((*rit)->inputs.size() != 0) {
       // NodePtr fwd_node = (mirror_map.size() == 0 ? ptr : mirror_map.at(ptr.get()));
       NodePtr fwd_node = ptr;
-      if (mirror_map_modified.size() != 0) {
-        const std::unordered_map<NodePtr, NodePtr>& src_mirror_map =
-            mirror_map_modified.at(ptr);
-        std::unordered_map<NodePtr, NodePtr>::const_iterator src_mirror_map_iter;
-        if ((src_mirror_map_iter = src_mirror_map.find(ptr)) !=
-             src_mirror_map.end()) {
-          fwd_node = src_mirror_map_iter->second;
-        }
+      if (mirror_map.size() != 0) {
+        fwd_node = mirror_map.at(ptr).first;
       }
 
       std::vector<NodeEntry> input_grads;

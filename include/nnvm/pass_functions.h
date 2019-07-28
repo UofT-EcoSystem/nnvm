@@ -123,6 +123,14 @@ inline Graph PlaceDevice(Graph graph,
   return ApplyPass(std::move(graph), "PlaceDevice");
 }
 
+enum class MirrorType {
+  kNone,
+  kInput,  // operators that cannot be recomputed, but since they ONLY require
+           // the inputs to compute the gradients, we can still safely mirror
+           // those operators without any runtime overhead
+  kBoth    // operators that can be safely recomputed
+};
+
 /*!
  * \brief Get the gradient graph whose outputs are gradients of xs wrt to ys.
  * \param graph The input graph.
@@ -143,10 +151,12 @@ inline Graph Gradient(
     std::vector<NodeEntry> ys,
     std::vector<NodeEntry> xs,
     std::vector<NodeEntry> ys_out_grad,
-    std::function<NodeEntry(std::vector<NodeEntry>&& inputs)> aggregate_fun = nullptr,
-    std::function<bool(const NodePtr&,
-                       const NodePtr&)> mirror_fun = nullptr,
-    std::function<NodeEntry(const NodeEntry& src, const NodeEntry &like)>
+    std::function< NodeEntry(std::vector<NodeEntry>&& inputs)> 
+        aggregate_fun = nullptr,
+    std::function<MirrorType(const NodePtr& node_ptr)>
+           mirror_fun = nullptr,
+    std::function< NodeEntry(const NodeEntry& src,
+                             const NodeEntry& like)>
         attr_hint_fun = nullptr,
     std::vector<const Op*> zero_ops = std::vector<const Op*>(),
     std::string copy_op_str = std::string(),
