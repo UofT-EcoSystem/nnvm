@@ -58,8 +58,6 @@ struct GradEntry {
   bool need_attr_hint{true};
 };
 
-#define BASELINE_BACKWARD_MIRRORING 0
-
 #if BASELINE_BACKWARD_MIRRORING
 
 Graph Gradient(Graph src) {
