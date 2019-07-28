@@ -145,7 +145,7 @@ inline Graph Gradient(
     std::function<bool(const NodePtr&,
                        const NodePtr&)> mirror_fun = nullptr,
     std::function<NodeEntry(const NodeEntry& src, const NodeEntry &like)>
-    attr_hint_fun = nullptr,
+        attr_hint_fun = nullptr,
     std::vector<const Op*> zero_ops = std::vector<const Op*>(),
     std::string copy_op_str = std::string(),
     ShapeVector in_arg_shapes = std::vector<TShape>(),
