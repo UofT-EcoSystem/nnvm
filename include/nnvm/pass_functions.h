@@ -20,7 +20,7 @@
 namespace nnvm {
 namespace pass {
 
-#define BASELINE_BACKWARD_MIRRORING 0
+#define BASELINE_BACKWARD_MIRRORING 1
 
 /*!
  * \brief Load a graph from JSON string, redirects to "LoadJSON" pass.
@@ -153,7 +153,11 @@ inline Graph Gradient(
     std::vector<NodeEntry> ys_out_grad,
     std::function< NodeEntry(std::vector<NodeEntry>&& inputs)> 
         aggregate_fun = nullptr,
+#if BASELINE_BACKWARD_MIRRORING
+    std::function<bool(const NodePtr& node_ptr)> 
+#else  // !BASELINE_BACKWARD_MIRRORING
     std::function<MirrorType(const NodePtr& node_ptr)>
+#endif  // BASELINE_BACKWARD_MIRRORING
            mirror_fun = nullptr,
     std::function< NodeEntry(const NodeEntry& src,
                              const NodeEntry& like)>

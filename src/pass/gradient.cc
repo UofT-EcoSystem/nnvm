@@ -63,8 +63,7 @@ struct GradEntry {
 
 Graph Gradient(Graph src) {
   using nnvm::FGradient;
-  using MirrorFun = std::function<bool (const NodePtr&,
-                                        const NodePtr&)>;
+  using MirrorFun = std::function<bool (const NodePtr&)>;
   using AttrHintFun = std::function<NodeEntry (const NodeEntry& src, const NodeEntry &like)>;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
@@ -128,7 +127,7 @@ Graph Gradient(Graph src) {
   std::unordered_map<Node*, NodePtr> mirror_map;
   if (mirror_fun != nullptr) {
     for (const NodePtr& n : topo_order) {
-      if (mirror_fun(n, nullptr)) {
+      if (mirror_fun(n)) {
         NodePtr new_node = Node::Create();
         *new_node = *n;
         new_node->attrs.name += "_mirror";
@@ -247,7 +246,7 @@ Graph Gradient(Graph src) {
   return ret;
 }
 
-#else
+#else  // !BASELINE_BACKWARD_MIRRORING
 
 /// @brief Auxiliary function that builds a backward graph
 ///          based on the provided mirror function.
