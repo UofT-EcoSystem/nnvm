@@ -542,14 +542,27 @@ Graph _buildBackwardGraph(
         //   released back to the storage pool, as outputs of layers such as
         //   fully-connected are usually huge, they cannot be easily reused,
         //   resulting in huge increase in overall memory footprint.
+        bool is_dead_node = true;
+
         for (NodeEntry& input_grad_entry : input_grads) {
-          for (NodePtr& control_dep : 
-               input_grad_entry.node->control_deps) {
-            if (control_dep == fwd_node) {
-              control_dep = ptr;
+          for (NodeEntry& input_entry : 
+              input_grad_entry.node->inputs) {
+            if (input_entry.node == fwd_node) {
+              is_dead_node = false;
             }
-          }  // for (control_dep ∈ input_grad.control_deps)
+          }  // for (input_entry ∈ input_grad_entry.node->inputs)
         }  // for (input_grad_entry ∈ input_grads)
+
+        if (is_dead_node) {
+          for (NodeEntry& input_grad_entry : input_grads) {
+            for (NodePtr& control_dep : 
+                input_grad_entry.node->control_deps) {
+              if (control_dep == fwd_node) {
+                control_dep = ptr;
+              }
+            }  // for (control_dep ∈ input_grad.control_deps)
+          }  // for (input_grad_entry ∈ input_grads)
+        }  // is_dead_node
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {

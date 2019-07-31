@@ -20,7 +20,7 @@
 namespace nnvm {
 namespace pass {
 
-#define BASELINE_BACKWARD_MIRRORING 1
+#define BASELINE_BACKWARD_MIRRORING 0
 
 /*!
  * \brief Load a graph from JSON string, redirects to "LoadJSON" pass.
