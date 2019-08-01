@@ -15,6 +15,9 @@ namespace nnvm {
 namespace pass {
 namespace {
 
+// A guard that logs mirroring information for only once.
+static bool logged_do_mirror = false;
+
 // default aggregate gradient function
 // require operator __zero__ and __ewise_sum__ to be presented.
 NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
@@ -62,6 +65,16 @@ struct GradEntry {
 #if BASELINE_BACKWARD_MIRRORING
 
 Graph Gradient(Graph src) {
+  if (!logged_do_mirror) {
+    if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0)) {
+      LOG(INFO) << "MXNet has the baseline "
+                << "mirroring algorithm enabled";
+    } else {
+      LOG(INFO) << "MXNet has backward mirroring disabled";
+    }
+    logged_do_mirror = true;
+  }
+
   using nnvm::FGradient;
   using MirrorFun = std::function<bool (const NodePtr&)>;
   using AttrHintFun = std::function<NodeEntry (const NodeEntry& src, const NodeEntry &like)>;
@@ -261,6 +274,15 @@ Graph _buildBackwardGraph(
                   NodePtr> >& mirror_map);
 
 Graph Gradient(Graph src) {
+  if (!logged_do_mirror) {
+    if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0)) {
+      LOG(INFO) << "MXNet has the self-defined "
+                << "mirroring algorithm enabled";
+    } else {
+      LOG(INFO) << "MXNet has backward mirroring disabled";
+    }
+    logged_do_mirror = true;
+  }
   using nnvm::FGradient;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
