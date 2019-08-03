@@ -581,10 +581,17 @@ Graph _buildBackwardGraph(
                 input_grad_entry.node->control_deps) {
               if (control_dep == fwd_node) {
                 control_dep = ptr;
+
+                for (NodePtr& fwd_node_control_dep : 
+                    fwd_node->control_deps) {
+                  input_grad_entry.node->control_deps.push_back(
+                      fwd_node_control_dep);
+                }
+                break;
               }
             }  // for (control_dep ∈ input_grad.control_deps)
           }  // for (input_grad_entry ∈ input_grads)
-        }  // is_dead_node
+        }  // if (is_dead_node)
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
