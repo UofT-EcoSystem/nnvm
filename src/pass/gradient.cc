@@ -593,8 +593,9 @@ Graph _buildBackwardGraph(
           }  // for (input_grad_entry ∈ input_grads)
         }  // if (is_dead_node)
 
-        if (ptr->attrs.op->name == "BatchNorm" ||
-            ptr->attrs.op->name == "CuDNNBatchNorm") {
+        if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0) &&
+            (ptr->attrs.op->name == "BatchNorm" ||
+             ptr->attrs.op->name == "CuDNNBatchNorm")) {
           NodePtr& input_grad_node = input_grads[0].node;
           const NodePtr& bn_data_node       = ptr->inputs[0].node;
           const uint32_t bn_data_entry_idx  = ptr->inputs[0].index;
