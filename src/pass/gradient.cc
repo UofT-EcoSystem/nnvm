@@ -575,7 +575,7 @@ Graph _buildBackwardGraph(
           }  // for (input_entry ∈ input_grad_entry.node->inputs)
         }  // for (input_grad_entry ∈ input_grads)
 
-        if (is_dead_node) {
+        if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0) && is_dead_node) {
           for (NodeEntry& input_grad_entry : input_grads) {
             for (NodePtr& control_dep : 
                 input_grad_entry.node->control_deps) {
