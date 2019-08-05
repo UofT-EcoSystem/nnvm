@@ -592,6 +592,41 @@ Graph _buildBackwardGraph(
             }  // for (control_dep ∈ input_grad.control_deps)
           }  // for (input_grad_entry ∈ input_grads)
         }  // if (is_dead_node)
+
+        if (ptr->attrs.op->name == "BatchNorm" ||
+            ptr->attrs.op->name == "CuDNNBatchNorm") {
+          NodePtr& input_grad_node = input_grads[0].node;
+          const NodePtr& bn_data_node       = ptr->inputs[0].node;
+          const uint32_t bn_data_entry_idx  = ptr->inputs[0].index;
+
+          for (NodeEntry& input_grad_node_entry : 
+              input_grad_node->inputs) {
+            if (input_grad_node_entry.node  == bn_data_node && 
+                input_grad_node_entry.index == bn_data_entry_idx) {
+              // find the node entry that corresponds to the data input to the `BatchNorm` layer
+              NodePtr bn_inv_node = Node::Create();
+
+              bn_inv_node->attrs.op = nnvm::Op::Get("BatchNormInv");
+
+              LOG(INFO) << "Requested Op: " << bn_inv_node->attrs.op->name;
+              bn_inv_node->attrs.name = ptr->attrs.name + "_inv";
+              bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 0, 0}); // output
+              bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 1, 0}); // mean
+              bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 2, 0}); // inv_var
+              bn_inv_node->inputs.push_back(ptr->inputs[1]); // gamma
+              bn_inv_node->inputs.push_back(ptr->inputs[2]); // beta
+              // redirect the input data to the output of the inverse node
+              input_grad_node_entry = nnvm::NodeEntry{bn_inv_node, 0, 0};
+            }
+          }
+          // LOG(INFO) << "BatchNormGrad Inputs: ";
+          // for (NodeEntry& input_grad_node_entry : 
+          //     input_grad_node->inputs) {
+          //   LOG(INFO) << "\t" << "Node " << input_grad_node_entry.node->attrs.name 
+          //             << "\t" << "OEdge" << input_grad_node_entry.index;
+          // }
+        }
+
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
