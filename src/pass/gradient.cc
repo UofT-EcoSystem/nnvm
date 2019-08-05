@@ -607,8 +607,6 @@ Graph _buildBackwardGraph(
               NodePtr bn_inv_node = Node::Create();
 
               bn_inv_node->attrs.op = nnvm::Op::Get("BatchNormInv");
-
-              LOG(INFO) << "Requested Op: " << bn_inv_node->attrs.op->name;
               bn_inv_node->attrs.name = ptr->attrs.name + "_inv";
               bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 0, 0}); // output
               bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 1, 0}); // mean
