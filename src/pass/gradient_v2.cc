@@ -10,9 +10,6 @@ namespace nnvm {
 namespace pass {
 namespace {
 
-// A guard that logs mirroring information for only once.
-static bool logged_do_mirror = false;
-
 /// @brief Default Gradient Aggregation Function
 NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
   if (v.size() == 1) {
@@ -68,6 +65,9 @@ Graph _buildBackwardGraph(
           std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<NodePtr, std::pair<NodePtr, 
                                                 NodePtr> >& mirror_map);
+
+// A guard that logs mirroring information for only once.
+static bool logged_do_mirror = false;
 
 Graph GradientV2(Graph src) {
   if (!logged_do_mirror) {
