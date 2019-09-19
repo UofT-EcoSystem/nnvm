@@ -383,7 +383,7 @@ Graph _buildBackwardGraph(
           }  // for (input_grad_entry ∈ input_grads)
         }  // if (is_dead_node)
 
-        // if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0) &&
+        // if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR_V2", 0) &&
         //     (ptr->attrs.op->name == "BatchNorm" ||
         //      ptr->attrs.op->name == "CuDNNBatchNorm")) {
         //   NodePtr& input_grad_node = input_grads[0].node;
