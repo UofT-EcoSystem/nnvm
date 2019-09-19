@@ -5,9 +5,7 @@
  * This code code was modified based on mxnet codebase by Min Lin
  */
 #include <nnvm/pass.h>
-#include <nnvm/pass_functions.h>
 #include <nnvm/op_attr_types.h>
-#include <nnvm/graph_attr_types.h>
 #include <algorithm>
 #include <functional>
 
@@ -59,10 +57,13 @@ struct GradEntry {
   bool need_attr_hint{true};
 };
 
+// CHANGE(BackwardMirroring)
 // A guard that logs mirroring information for only once.
 static bool logged_do_mirror = false;
 
 Graph Gradient(Graph src) {
+  // CHANGE(BackwardMirroring)
+  // Added logging when backward mirroring is enabled.
   if (!logged_do_mirror) {
     if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0)) {
       LOG(INFO) << "MXNet has the BASELINE "
@@ -74,7 +75,7 @@ Graph Gradient(Graph src) {
   }
 
   using nnvm::FGradient;
-  using MirrorFun = std::function<bool (const NodePtr&)>;
+  using MirrorFun = std::function<int (const Node& node)>;
   using AttrHintFun = std::function<NodeEntry (const NodeEntry& src, const NodeEntry &like)>;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
@@ -138,7 +139,7 @@ Graph Gradient(Graph src) {
   std::unordered_map<Node*, NodePtr> mirror_map;
   if (mirror_fun != nullptr) {
     for (const NodePtr& n : topo_order) {
-      if (mirror_fun(n)) {
+      if (mirror_fun(*n)) {
         NodePtr new_node = Node::Create();
         *new_node = *n;
         new_node->attrs.name += "_mirror";
@@ -257,12 +258,11 @@ Graph Gradient(Graph src) {
   return ret;
 }
 
+// register pass
 NNVM_REGISTER_PASS(Gradient)
 .describe("Return a gradient graph of src.attrs[\"ys\"] wrt src.attrs[\"xs\"]")
 .set_body(Gradient)
 .set_change_graph(true)
-.depend_graph_attr("shape_inputs")
-.depend_graph_attr("dtype_inputs")
 .depend_graph_attr("grad_ys")
 .depend_graph_attr("grad_xs")
 .depend_graph_attr("grad_ys_out_grad");
