@@ -33,16 +33,20 @@ NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
 
 bool CheckGradAllZero(const std::vector<NodeEntry>& grads,
                       const std::vector<const Op*>& zero_ops) {
-  if (!grads.size() || !zero_ops.size()) return false;
+  if (!grads.size() || !zero_ops.size()) {
+    return false;
+  }
   for (const auto& g : grads) {
-    bool found = false;
+    bool is_zero_op = false;
     for (const auto& op : zero_ops) {
       if (g.node->op() == op) {
-        found = true;
+        is_zero_op = true;
         break;
       }
     }
-    if (!found) return false;
+    if (!is_zero_op) {
+      return false;
+    }
   }
   return true;
 }
@@ -90,8 +94,7 @@ Graph GradientV2(Graph src) {
   const std::vector<NodeEntry>& ys_out_grad =
       src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
 
-  using MirrorFun = std::function<MirrorType(
-      const NodePtr&)>;
+  using MirrorFun = std::function<MirrorType(const NodePtr&)>;
   MirrorFun mirror_fun = nullptr;
   if (src.attrs.count("mirror_fun") != 0) {
     mirror_fun = src.GetAttr<MirrorFun>("mirror_fun");
@@ -99,11 +102,11 @@ Graph GradientV2(Graph src) {
 
   // initialize topological order and output gradients
   std::vector<NodePtr> topo_order;
-  std::unordered_map<Node*, std::vector<GradEntry> > output_grads;
+  std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads;
 
   DFSVisit(ys, [&](const NodePtr& node) {
-      if (output_grads.count(node.get()) == 0) {
-        output_grads[node.get()].resize(node->num_outputs());
+      if (output_grads.count(node) == 0) {
+        output_grads[node].resize(node->num_outputs());
       }
       topo_order.push_back(node);
     });
@@ -111,21 +114,21 @@ Graph GradientV2(Graph src) {
   CHECK_EQ(ys.size(), ys_out_grad.size());
   for (size_t i = 0; i < ys.size(); ++i) {
     NodeEntry ograd = ys_out_grad[i];
-    output_grads[ys[i].node.get()][ys[i].index].grads = { ograd };
+    output_grads[ys[i].node][ys[i].index].grads = { ograd };
   }
 
-  // check that all xs are reachable from ys
+  // check that all `xs` are reachable from `ys`
   for (size_t i = 0; i < xs.size(); ++i) {
-    CHECK(output_grads.find(xs[i].node.get()) != output_grads.end())
-        << "Cannot differentiate with respect to the " << i+1 << "-th variable "
+    CHECK(output_grads.find(xs[i].node) != output_grads.end())
+        << "Cannot differentiate with respect to the " 
+        << i+1 << "-th variable "
         << "because it is unreachable from the outputs.";
   }
 
   std::unordered_map<NodePtr,
       std::pair<NodePtr, 
                 NodePtr> > mirror_map;
-  // record the list of mirrored operators, used for 
-  //   debugging and logging purposes
+  // record the list of mirrored operators, used for debugging and logging purposes
   std::unordered_set<std::string> mirror_ops;
   // record the longest mirror path
   std::pair<std::size_t, std::vector<NodePtr> > longest_mirror_path;
@@ -298,28 +301,26 @@ Graph _buildBackwardGraph(
     const std::vector<NodePtr>& topo_order,
           std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map) {
-  using AttrHintFun = std::function<NodeEntry(
+  using AggregateFun = std::function<NodeEntry(
+      std::vector<NodeEntry>&& inputs)>;
+  using AttrHintFun  = std::function<NodeEntry(
       const NodeEntry& src,
       const NodeEntry& like)>;
-  AttrHintFun attr_hint_fun = nullptr;
-  if (src.attrs.count("attr_hint_fun") != 0) {
-    attr_hint_fun = src.GetAttr<AttrHintFun>("attr_hint_fun");
-  }
-  using AggFun = std::function<NodeEntry(std::vector<NodeEntry>&& inputs)>;
-  AggFun agg_fun = DefaultAggregateGradient;
-  if (src.attrs.count("grad_aggregate_fun") != 0) {
-    agg_fun = src.GetAttr<AggFun>("grad_aggregate_fun");
-  }
+  AggregateFun aggregate_fun = DefaultAggregateGradient;
+  AttrHintFun  attr_hint_fun = nullptr;
+  if (src.attrs.count("aggregate_fun") != 0) aggregate_fun = src.GetAttr<AggregateFun>("aggregate_fun");
+  if (src.attrs.count("attr_hint_fun") != 0) attr_hint_fun = src.GetAttr<AttrHintFun> ("attr_hint_fun");
+
   std::vector<const Op*> zero_ops;
   if (src.attrs.count("zero_ops") != 0) {
     zero_ops = src.GetAttr<std::vector<const Op*> >("zero_ops");
   }
-  const Op* copy_op = (src.attrs.count("copy_op") != 0) ?
-      Op::Get(src.GetAttr<std::string>("copy_op")) :
+  const Op* copy_op = (src.attrs.count("copy_op_str") != 0) ?
+      Op::Get(src.GetAttr<std::string>("copy_op_str")) :
       nullptr;
 
   // traverse backward
-  static auto& grad_fun_map = Op::GetAttr<FGradient>("FGradient");
+  static auto& grad_fun_map = Op::GetAttr<FGradient>  ("FGradient");
   static auto& finfer_shape = Op::GetAttr<FInferShape>("FInferShape");
 
   std::vector<NodeEntry> out_agg_grads;
@@ -327,10 +328,10 @@ Graph _buildBackwardGraph(
     const NodePtr& ptr = *rit;
     if (ptr->is_variable()) continue;
     out_agg_grads.clear();
-    auto& out_grad_vec = output_grads.at(ptr.get());
+    auto& out_grad_vec = output_grads.at(ptr);
     for (uint32_t i = 0; i < out_grad_vec.size(); ++i) {
       GradEntry& e = out_grad_vec[i];
-      e.sum = agg_fun(std::move(e.grads));
+      e.sum = aggregate_fun(std::move(e.grads));
       if (e.need_attr_hint && attr_hint_fun != nullptr) {
         e.sum = attr_hint_fun(e.sum, NodeEntry{ptr, 0, i});
       }
@@ -364,7 +365,7 @@ Graph _buildBackwardGraph(
           }  // for (input_entry ∈ input_grad_entry.node->inputs)
         }  // for (input_grad_entry ∈ input_grads)
 
-        if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR", 0) && is_dead_node) {
+        if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR_V2", 0) && is_dead_node) {
           for (NodeEntry& input_grad_entry : input_grads) {
             for (NodePtr& control_dep : 
                 input_grad_entry.node->control_deps) {
@@ -407,12 +408,6 @@ Graph _buildBackwardGraph(
         //       input_grad_node_entry = nnvm::NodeEntry{bn_inv_node, 0, 0};
         //     }
         //   }
-        //   // LOG(INFO) << "BatchNormGrad Inputs: ";
-        //   // for (NodeEntry& input_grad_node_entry : 
-        //   //     input_grad_node->inputs) {
-        //   //   LOG(INFO) << "\t" << "Node " << input_grad_node_entry.node->attrs.name 
-        //   //             << "\t" << "OEdge" << input_grad_node_entry.index;
-        //   // }
         // }
 
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
@@ -441,7 +436,7 @@ Graph _buildBackwardGraph(
       }
       auto git = input_grads.begin();
       for (auto it = (*rit)->inputs.begin(); it != (*rit)->inputs.end(); ++it, ++git) {
-        auto& ge = output_grads[it->node.get()][it->index];
+        auto& ge = output_grads[it->node][it->index];
         // if any of the backward op can do shape inference, the hint is not necessary.
         if (finfer_shape.count(git->node->op())) {
           ge.need_attr_hint = false;
@@ -450,16 +445,16 @@ Graph _buildBackwardGraph(
       }
     }
   }
-  // take out the xs' grads
+  // take out the `xs`' grads
   Graph ret;
   ret.outputs.resize(xs.size());
   NodeEntryMap<std::pair<size_t, size_t> > unique_grads;
   size_t counter = 0;
   for (const NodeEntry& e : xs) {
-    GradEntry& entry = output_grads[e.node.get()][e.index];
+    GradEntry& entry = output_grads[e.node][e.index];
     // aggregate sum if there haven't been
     if (entry.sum.node.get() == nullptr) {
-      entry.sum = agg_fun(std::move(entry.grads));
+      entry.sum = aggregate_fun(std::move(entry.grads));
       if (entry.need_attr_hint && attr_hint_fun != nullptr) {
         entry.sum = attr_hint_fun(entry.sum, e);
       }
@@ -477,7 +472,8 @@ Graph _buildBackwardGraph(
         copy_node->attrs.name = os.str();
         copy_node->inputs.emplace_back(entry.sum);
         if (copy_node->attrs.op->attr_parser != nullptr) {
-            copy_node->attrs.op->attr_parser(&(copy_node->attrs));
+          copy_node->attrs.op
+                   ->attr_parser(&(copy_node->attrs));
         }
         unique_grads.emplace(NodeEntry{std::move(copy_node), 0, 0}, std::make_pair(1, counter));
       }

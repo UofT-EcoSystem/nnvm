@@ -15,9 +15,6 @@ namespace nnvm {
 namespace pass {
 namespace {
 
-// A guard that logs mirroring information for only once.
-static bool logged_do_mirror = false;
-
 // default aggregate gradient function
 // require operator __zero__ and __ewise_sum__ to be presented.
 NodeEntry DefaultAggregateGradient(std::vector<NodeEntry>&& v) {
@@ -61,6 +58,9 @@ struct GradEntry {
   std::vector<NodeEntry> grads;
   bool need_attr_hint{true};
 };
+
+// A guard that logs mirroring information for only once.
+static bool logged_do_mirror = false;
 
 Graph Gradient(Graph src) {
   if (!logged_do_mirror) {
