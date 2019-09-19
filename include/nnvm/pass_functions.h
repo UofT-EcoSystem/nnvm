@@ -20,8 +20,6 @@
 namespace nnvm {
 namespace pass {
 
-#define BASELINE_BACKWARD_MIRRORING 0
-
 /*!
  * \brief Load a graph from JSON string, redirects to "LoadJSON" pass.
  * \param json_str The json string.
@@ -131,66 +129,75 @@ enum class MirrorType {
   kBoth    // operators that can be safely recomputed
 };
 
-/*!
- * \brief Get the gradient graph whose outputs are gradients of xs wrt to ys.
- * \param graph The input graph.
- * \param ys The entries we want to take gradient from.
- * \param xs The input to take gradient with respect to.
- * \param ys_out_grad The symbol for additional gradient to be propagate back to y.
- * \param aggregate_fun Aggregation function applied to aggregate the inputs.
- * \param mirror_fun Optional mirror function to do mirror optimization and save memory.
- * \param attr_hint_fun Optional, hint function to output a node that like src, but its attr is same as like.
- * \param zero_ops Optional, list of operators that outputs a single zero array. The first one
- *  must be zeros_like.
- * \param copy_op_str Optional, name of the copy operation required to handle duplicates
- *  on the edge of the graph
- * \return A new graph, whose outputs correspond to inputs of xs.
- */
+
+/// @brief  Get the gradient graph whose outputs are gradients of xs w.r.t. ys.
+/// @param  graph         input graph
+/// @param  ys            the entries we want to take gradients from
+/// @param  xs            the entries we want to take gradients w.r.t.
+/// @param  ys_out_grad   the symbol of additional gradient to be propagated back to `y`
+/// @param  aggregate_fun function for aggregating input gradients
+/// @param  mirror_func   function for doing mirror optimization
+/// @param  attr_hint_fun function for outputing a node that is like `src`, 
+///                         but its attr is the same as `like`
+/// @param  zero_ops      list of operators that outputs a single zero array
+/// @param  copy_op_str   list of operators that handles duplicates on the edge of the graph
+/// @return the new graph, whose outputs correspond to inputs of `xs`
 inline Graph Gradient(
     Graph graph,
     std::vector<NodeEntry> ys,
     std::vector<NodeEntry> xs,
     std::vector<NodeEntry> ys_out_grad,
-    std::function< NodeEntry(std::vector<NodeEntry>&& inputs)> 
+    std::function<NodeEntry (std::vector<NodeEntry>&& inputs)> 
         aggregate_fun = nullptr,
-#if BASELINE_BACKWARD_MIRRORING
-    std::function<bool(const NodePtr& node_ptr)> 
-#else  // !BASELINE_BACKWARD_MIRRORING
-    std::function<MirrorType(const NodePtr& node_ptr)>
-#endif  // BASELINE_BACKWARD_MIRRORING
-           mirror_fun = nullptr,
-    std::function< NodeEntry(const NodeEntry& src,
+    std::function<MirrorType(const NodePtr& node_ptr)> mirror_fun = nullptr,
+    std::function<NodeEntry (const NodeEntry& src,
+                             const NodeEntry& like)>
+        attr_hint_fun = nullptr,
+    std::vector<const Op*> zero_ops = std::vector<const Op*>(),
+    std::string copy_op_str = std::string()) {
+  graph.attrs["grad_ys"] = std::make_shared<any>(std::move(ys));
+  graph.attrs["grad_xs"] = std::make_shared<any>(std::move(xs));
+  graph.attrs["grad_ys_out_grad"] = std::make_shared<any>(std::move(ys_out_grad));
+
+  if (aggregate_fun != nullptr) graph.attrs["aggregate_fun"] = std::make_shared<any>(aggregate_fun);
+  if (mirror_fun    != nullptr) graph.attrs["mirror_fun"]    = std::make_shared<any>(mirror_fun);
+  if (attr_hint_fun != nullptr) graph.attrs["attr_hint_fun"] = std::make_shared<any>(attr_hint_fun);
+
+  if (zero_ops   .size()) graph.attrs["zero_ops"]    = std::make_shared<any>(std::move(zero_ops));
+  if (copy_op_str.size()) graph.attrs["copy_op_str"] = std::make_shared<any>(std::move(copy_op_str));
+
+  return ApplyPass(std::move(graph), "Gradient");
+}
+
+inline Graph GradientV2(
+    Graph graph,
+    std::vector<NodeEntry> ys,
+    std::vector<NodeEntry> xs,
+    std::vector<NodeEntry> ys_out_grad,
+    std::function<NodeEntry (std::vector<NodeEntry>&& inputs)> 
+        aggregate_fun = nullptr,
+    std::function<MirrorType(const NodePtr& node_ptr)> mirror_fun = nullptr,
+    std::function<NodeEntry (const NodeEntry& src,
                              const NodeEntry& like)>
         attr_hint_fun = nullptr,
     std::vector<const Op*> zero_ops = std::vector<const Op*>(),
     std::string copy_op_str = std::string(),
     ShapeVector in_arg_shapes = std::vector<TShape>(),
     DTypeVector in_arg_dtypes = std::vector<int>()) {
-    // CHANGE(BackwardMirroring) Added shapes and dtypes of graph input arguments.
   graph.attrs["grad_ys"] = std::make_shared<any>(std::move(ys));
   graph.attrs["grad_xs"] = std::make_shared<any>(std::move(xs));
   graph.attrs["grad_ys_out_grad"] = std::make_shared<any>(std::move(ys_out_grad));
   graph.attrs["shape_inputs"] = std::make_shared<any>(std::move(in_arg_shapes));
   graph.attrs["dtype_inputs"] = std::make_shared<any>(std::move(in_arg_dtypes));
 
-  if (aggregate_fun != nullptr)
-    graph.attrs["grad_aggregate_fun"] = 
-        std::make_shared<any>(aggregate_fun);
-  if (mirror_fun != nullptr)
-    graph.attrs["grad_mirror_fun"] = 
-        std::make_shared<any>(mirror_fun);
-  if (attr_hint_fun != nullptr)
-    graph.attrs["attr_hint_fun"] = 
-        std::make_shared<any>(attr_hint_fun);
+  if (aggregate_fun != nullptr) graph.attrs["aggregate_fun"] = std::make_shared<any>(aggregate_fun);
+  if (mirror_fun    != nullptr) graph.attrs["mirror_fun"]    = std::make_shared<any>(mirror_fun);
+  if (attr_hint_fun != nullptr) graph.attrs["attr_hint_fun"] = std::make_shared<any>(attr_hint_fun);
 
-  if (zero_ops.size())
-    graph.attrs["zero_ops"] = 
-        std::make_shared<any>(std::move(zero_ops));
-  if (copy_op_str != std::string())
-    graph.attrs["copy_op"] = 
-        std::make_shared<any>(std::move(copy_op_str));
+  if (zero_ops   .size()) graph.attrs["zero_ops"]    = std::make_shared<any>(std::move(zero_ops));
+  if (copy_op_str.size()) graph.attrs["copy_op_str"] = std::make_shared<any>(std::move(copy_op_str));
 
-  return ApplyPass(std::move(graph), "Gradient");
+  return ApplyPass(std::move(graph), "GradientV2");
 }
 
 }  // namespace pass
