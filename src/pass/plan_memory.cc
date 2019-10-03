@@ -233,7 +233,7 @@ size_t AllocMemory(const Graph& ret, const IndexedGraph& idx,
           storage_ref_count[sid_in] += entry_ref_count[eid_out];
           storage_inplace_index[eid_out] = kv.first;
         } else {
-          if (dmlc::GetEnv("USE_COALESCE_SOFTMAX", false)) {
+          if (dmlc::GetEnv("NNVM_USE_COALESCE_SOFTMAX", false)) {
             if (!logged_use_coalesce_softmax) {
               LOG(INFO) << "MXNet will be coalescing the forward and backward "
                         << "pass of the softmax layer. "
