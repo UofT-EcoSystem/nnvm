@@ -75,8 +75,10 @@ Graph Gradient(Graph src) {
   }
 
   using nnvm::FGradient;
-  using MirrorFun = std::function<int (const Node& node)>;
-  using AttrHintFun = std::function<NodeEntry (const NodeEntry& src, const NodeEntry &like)>;
+  using MirrorFun   = std::function<bool (const Node& node)>;
+  using AttrHintFun = std::function<NodeEntry (
+      const NodeEntry& src,
+      const NodeEntry &like)>;
 
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
       << "Gradient require grad_ys to be presented.";
