@@ -386,6 +386,7 @@ Graph _buildBackwardGraph(
         // if (dmlc::GetEnv("MXNET_BACKWARD_DO_MIRROR_V2", 0) &&
         //     (ptr->attrs.op->name == "BatchNorm" ||
         //      ptr->attrs.op->name == "CuDNNBatchNorm")) {
+          
         //   NodePtr& input_grad_node = input_grads[0].node;
         //   const NodePtr& bn_data_node       = ptr->inputs[0].node;
         //   const uint32_t bn_data_entry_idx  = ptr->inputs[0].index;
@@ -399,11 +400,11 @@ Graph _buildBackwardGraph(
 
         //       bn_inv_node->attrs.op = nnvm::Op::Get("BatchNormInv");
         //       bn_inv_node->attrs.name = ptr->attrs.name + "_inv";
-        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 0, 0}); // output
-        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 1, 0}); // mean
-        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 2, 0}); // inv_var
-        //       bn_inv_node->inputs.push_back(ptr->inputs[1]); // gamma
-        //       bn_inv_node->inputs.push_back(ptr->inputs[2]); // beta
+        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 0, 0});  // output
+        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 1, 0});  // mean
+        //       bn_inv_node->inputs.push_back(nnvm::NodeEntry{ptr, 2, 0});  // inv_var
+        //       bn_inv_node->inputs.push_back(ptr->inputs[1]);              // gamma
+        //       bn_inv_node->inputs.push_back(ptr->inputs[2]);              // beta
         //       // redirect the input data to the output of the inverse node
         //       input_grad_node_entry = nnvm::NodeEntry{bn_inv_node, 0, 0};
         //     }
