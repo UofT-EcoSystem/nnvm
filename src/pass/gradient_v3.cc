@@ -73,12 +73,6 @@ Graph Gradient(Graph src) {
       src.GetAttr<std::vector<NodeEntry> >("grad_ys_out_grad");
   CHECK_EQ(ys.size(), ys_out_grad.size());
 
-  using MirrorFun = std::function<MirrorType(const NodePtr&)>;
-  MirrorFun mirror_fun = nullptr;
-  if (src.attrs.count("mirror_fun") != 0) {
-    mirror_fun = src.GetAttr<MirrorFun>("mirror_fun");
-  }
-
   // initialize a topological order of the graph nodes and `output_grads`
   // that maps every operator node to its gradient entries
   std::vector<NodePtr> topo_order;
@@ -101,6 +95,46 @@ Graph Gradient(Graph src) {
         << i+1 << "-th variable "
         << "because it is unreachable from the outputs.";
   }
+
+  std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> > mirror_map;
+
+  // complete the backward graph of the src, but with the mirror map being empty
+  nnvm::Graph gsrc_no_mirroring = BuildBackwardGraph(src, xs,
+          topo_order, output_grads, 
+          mirror_map);  // with the mirroring map being empty
+  const IndexedGraph& gsrc_no_mirroring_idx = gsrc_no_mirroring.indexed_graph();
+
+  using MirrorFun = std::function<MirrorType(const NodePtr&)>;
+  MirrorFun mirror_fun = nullptr;
+  if (src.attrs.count("mirror_fun") != 0) {
+    mirror_fun = src.GetAttr<MirrorFun>("mirror_fun");
+  }
+  if (mirror_fun == nullptr) {
+    return gsrc_no_mirroring;
+  }
+
+  // record the reference count of each node entry
+  std::vector<uint32_t> gsrc_entry_ref_count(gsrc_no_mirroring_idx.num_node_entries(), 0);
+  static const auto& fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
+  for (uint32_t nid = 0; nid < gsrc_no_mirroring_idx.num_nodes(); ++nid) {
+    const IndexedGraph::Node& inode = gsrc_no_mirroring_idx[nid];
+    if (inode.source->is_variable()) {
+      continue;  // variable nodes are ignored
+    }
+    for (const IndexedGraph::NodeEntry& e : inode.inputs) {
+      // increase the entry reference count if it is referenced by an operator input
+      ++gsrc_entry_ref_count[gsrc_no_mirroring_idx.entry_id(e)];
+    }
+    if (fignore_inputs.count(inode.source->op()) != 0) {
+      std::vector<uint32_t> ignore_inputs = 
+          fignore_inputs[inode.source->op()](inode.source->attrs);
+      for (const uint32_t i : ignore_inputs) {
+        // decrease the entry reference count if it belongs to the ignored inputs
+        --gsrc_entry_ref_count[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])];
+      }
+    }  // if (ignore_inputs)
+  }  // for (nid ∈ [0, idx.num_nodes())
+
 }
 
 // Given the list of gradient entries and zero operators, check whether all the
@@ -332,8 +366,8 @@ NNVM_REGISTER_PASS(MXGradient)
 .set_change_graph(true)
 .depend_graph_attr("grad_ys")
 .depend_graph_attr("grad_xs")
-.depend_graph_attr("in_arg_shapes")
-.depend_graph_attr("in_arg_dtypes")
+.depend_graph_attr("shape_inputs")
+.depend_graph_attr("dtype_inputs")
 .depend_graph_attr("grad_ys_out_grad");
 
 }  // namespace anonymous
