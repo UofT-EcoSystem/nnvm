@@ -239,7 +239,7 @@ Graph BuildBackwardGraph(
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
         for (size_t i = 0; i < fwd_node->num_inputs(); ++i) {
           std::ostringstream os;
-          if (1 == fwd_node->num_inputs()) {
+          if (fwd_node->num_inputs() == 1) {
             os << fwd_node->attrs.name << "_backward";
           } else {
             os << fwd_node->attrs.name << "_in" << i << "_backward";
@@ -258,9 +258,22 @@ Graph BuildBackwardGraph(
         LOG(FATAL) << "Operator " << fwd_node->op()->name << " is non-differentiable "
                    << "because it didn't register FGradient attribute.";
       }  // if (grad_fun_map.count(ptr->op()))
+      auto git = input_grads.begin();
+      for (auto it = (*rit)->inputs.begin(); it != (*rit)->inputs.end(); ++it, ++git) {
+        GradEntry& ge = output_grads[it->node][it->index];
+        // If any of the backward op can do shape inference, the attribute hint
+        // is not necessary.
+        if (finfer_shape.count(git->node->op())) {
+          ge.need_attr_hint = false;
+        }
+        // move the input gradients of the node entries to the output gradients
+        // of the next node in reverse topological orders
+        ge.grads.emplace_back(std::move(*git));
+      }
     }  // if ((*rit)->inputs.size() != 0)
-
   }  // for (rit ∈ reverse(topo_order))
+
+
 }
 
 // register pass
