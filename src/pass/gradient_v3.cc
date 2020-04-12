@@ -184,12 +184,12 @@ Graph BuildBackwardGraph(
     out_agg_grads.clear();
     std::vector<GradEntry>& out_grad_vec = output_grads.at(ptr);
     for (uint32_t i = 0; i < out_grad_vec.size(); ++i) {
-      GradEntry& e = out_grad_vec[i];
-      e.sum = aggregate_fun(std::move(e.grads));
-      if (e.need_attr_hint && attr_hint_fun != nullptr) {
-        e.sum = attr_hint_fun(e.sum, NodeEntry{ptr, 0, i});
+      GradEntry& grad_entry = out_grad_vec[i];
+      grad_entry.sum = aggregate_fun(std::move(grad_entry.grads));
+      if (grad_entry.need_attr_hint && attr_hint_fun != nullptr) {
+        grad_entry.sum = attr_hint_fun(grad_entry.sum, NodeEntry{ptr, 0, i});
       }
-      out_agg_grads.push_back(e.sum);
+      out_agg_grads.push_back(grad_entry.sum);
     }  // for (i ∈ out_grad_vec.size())
 
     if ((*rit)->inputs.size() != 0) {
@@ -279,32 +279,33 @@ Graph BuildBackwardGraph(
     }  // if ((*rit)->inputs.size() != 0)
   }  // for (rit ∈ reverse(topo_order))
 
-  // take out the `xs`' grads
+  // take out the xs' grads
   Graph ret;
   ret.outputs.resize(xs.size());
   NodeEntryMap<std::pair<size_t, size_t> > unique_grads;
   size_t counter = 0;
-  for (const NodeEntry& e : xs) {
-    GradEntry& entry = output_grads[e.node][e.index];
-    // aggregate sum if there haven't been
-    if (entry.sum.node.get() == nullptr) {
-      entry.sum = aggregate_fun(std::move(entry.grads));
-      if (entry.need_attr_hint && attr_hint_fun != nullptr) {
-        entry.sum = attr_hint_fun(entry.sum, e);
+  for (const NodeEntry& x : xs) {
+    GradEntry& xgrad_entry = output_grads[x.node][x.index];
+    // aggregate the gradients for every x, similar to what we did previously
+    if (xgrad_entry.sum.node.get() == nullptr) {
+      xgrad_entry.sum = aggregate_fun(std::move(xgrad_entry.grads));
+      if (xgrad_entry.need_attr_hint &&
+          attr_hint_fun != nullptr) {
+        xgrad_entry.sum = attr_hint_fun(xgrad_entry.sum, x);
       }
     }
     if (copy_op != nullptr) {
-      auto kv = unique_grads.find(entry.sum);
+      auto kv = unique_grads.find(xgrad_entry.sum);
       if (kv == unique_grads.end()) {
-        unique_grads.emplace(std::move(entry.sum), std::make_pair(1, counter));
+        unique_grads.emplace(std::move(xgrad_entry.sum), std::make_pair(1, counter));
       } else {
         NodePtr copy_node = Node::Create();
         std::ostringstream os;
-        os << entry.sum.node->attrs.name << "_" << kv->second.first << "_copy";
+        os << xgrad_entry.sum.node->attrs.name << "_" << kv->second.first << "_copy";
         kv->second.first++;
         copy_node->attrs.op = copy_op;
         copy_node->attrs.name = os.str();
-        copy_node->inputs.emplace_back(entry.sum);
+        copy_node->inputs.emplace_back(xgrad_entry.sum);
         if (copy_node->attrs.op->attr_parser != nullptr) {
           copy_node->attrs.op
                    ->attr_parser(&(copy_node->attrs));
@@ -312,10 +313,10 @@ Graph BuildBackwardGraph(
         unique_grads.emplace(NodeEntry{std::move(copy_node), 0, 0}, std::make_pair(1, counter));
       }
     } else {
-        ret.outputs[counter] = entry.sum;
+        ret.outputs[counter] = xgrad_entry.sum;
     }
     ++counter;
-  }
+  }  // for (e ∈ xs)
   if (copy_op != nullptr) {
     for (const auto& kv : unique_grads) {
       ret.outputs[kv.second.second] = kv.first;
