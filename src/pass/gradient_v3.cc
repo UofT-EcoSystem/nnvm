@@ -54,6 +54,8 @@ Graph BuildBackwardGraph(
     std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map);
 
+
+
 Graph Gradient(Graph src) {
   using nnvm::FGradient;
 
@@ -231,6 +233,10 @@ Graph BuildBackwardGraph(
                   break;
                 }
               }  // for (control_dep ∈ input_grad.control_deps)
+              for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+                input_grad_entry.node->control_deps.push_back(
+                    fwd_node_control_dep);
+              }
             }  // for (input_grad_entry ∈ input_grads)
           }  // if (is_fwd_node_dead)
         }  // if (fwd_node != ptr)
@@ -269,11 +275,53 @@ Graph BuildBackwardGraph(
         // move the input gradients of the node entries to the output gradients
         // of the next node in reverse topological orders
         ge.grads.emplace_back(std::move(*git));
-      }
+      }  // for (it ∈ rit->inputs, git ∈ input_grads)
     }  // if ((*rit)->inputs.size() != 0)
   }  // for (rit ∈ reverse(topo_order))
 
-
+  // take out the `xs`' grads
+  Graph ret;
+  ret.outputs.resize(xs.size());
+  NodeEntryMap<std::pair<size_t, size_t> > unique_grads;
+  size_t counter = 0;
+  for (const NodeEntry& e : xs) {
+    GradEntry& entry = output_grads[e.node][e.index];
+    // aggregate sum if there haven't been
+    if (entry.sum.node.get() == nullptr) {
+      entry.sum = aggregate_fun(std::move(entry.grads));
+      if (entry.need_attr_hint && attr_hint_fun != nullptr) {
+        entry.sum = attr_hint_fun(entry.sum, e);
+      }
+    }
+    if (copy_op != nullptr) {
+      auto kv = unique_grads.find(entry.sum);
+      if (kv == unique_grads.end()) {
+        unique_grads.emplace(std::move(entry.sum), std::make_pair(1, counter));
+      } else {
+        NodePtr copy_node = Node::Create();
+        std::ostringstream os;
+        os << entry.sum.node->attrs.name << "_" << kv->second.first << "_copy";
+        kv->second.first++;
+        copy_node->attrs.op = copy_op;
+        copy_node->attrs.name = os.str();
+        copy_node->inputs.emplace_back(entry.sum);
+        if (copy_node->attrs.op->attr_parser != nullptr) {
+          copy_node->attrs.op
+                   ->attr_parser(&(copy_node->attrs));
+        }
+        unique_grads.emplace(NodeEntry{std::move(copy_node), 0, 0}, std::make_pair(1, counter));
+      }
+    } else {
+        ret.outputs[counter] = entry.sum;
+    }
+    ++counter;
+  }
+  if (copy_op != nullptr) {
+    for (const auto& kv : unique_grads) {
+      ret.outputs[kv.second.second] = kv.first;
+    }
+  }
+  return ret;
 }
 
 // register pass
