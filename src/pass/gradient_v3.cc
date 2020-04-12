@@ -36,28 +36,6 @@ namespace nnvm {
 namespace pass {
 namespace {
 
-// Given the list of gradient entries and zero operators, check whether all the
-// gradients are zero or not.
-bool CheckGradAllZero(const std::vector<NodeEntry>& grads,
-                      const std::vector<const Op*>& zero_ops) {
-  if (!grads.size() || !zero_ops.size()) {
-    return false;
-  }
-  for (const auto& g : grads) {
-    bool is_zero_op = false;
-    for (const auto& op : zero_ops) {
-      if (g.node->op() == op) {
-        is_zero_op = true;
-        break;
-      }
-    }
-    if (!is_zero_op) {
-      return false;
-    }
-  }
-  return true;
-}
-
 struct GradEntry {
 #ifdef _MSC_VER
   NodeEntry sum = NodeEntry{nullptr, 0, 0};
@@ -73,8 +51,6 @@ Graph BuildBackwardGraph(
     const Graph& src,
     const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
-    // Note that the `output_grads` is made deliberately without `&`.
-    // The reason is because it is a COPY of the output gradients.
     std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map);
 
@@ -123,8 +99,28 @@ Graph Gradient(Graph src) {
         << i+1 << "-th variable "
         << "because it is unreachable from the outputs.";
   }
+}
 
-
+// Given the list of gradient entries and zero operators, check whether all the
+// gradients are zero or not.
+bool CheckGradAllZero(const std::vector<NodeEntry>& grads,
+                      const std::vector<const Op*>& zero_ops) {
+  if (!grads.size() || !zero_ops.size()) {
+    return false;
+  }
+  for (const auto& g : grads) {
+    bool is_zero_op = false;
+    for (const auto& op : zero_ops) {
+      if (g.node->op() == op) {
+        is_zero_op = true;
+        break;
+      }
+    }
+    if (!is_zero_op) {
+      return false;
+    }
+  }
+  return true;
 }
 
 Graph BuildBackwardGraph(
@@ -133,7 +129,8 @@ Graph BuildBackwardGraph(
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map) {
-  // gradient aggregation function and attribute hint function
+  // gradient aggregation and attribute hint function (The latter is usually set
+  // to NULL by the executor frontend)
   using AggregateFun = std::function<NodeEntry(
       std::vector<NodeEntry>&& inputs)>;
   using AttrHintFun = std::function<NodeEntry(
@@ -172,15 +169,16 @@ Graph BuildBackwardGraph(
   const Op* copy_op = (src.attrs.count("copy_op_str") != 0) ?
       Op::Get(src.GetAttr<std::string>("copy_op_str")) : nullptr;
 
-  // traverse backward
   static auto& grad_fun_map = Op::GetAttr<FGradient>("FGradient");
   static auto& finfer_shape = Op::GetAttr<FInferShape>("FInferShape");
 
   std::vector<NodeEntry> out_agg_grads;
   for (auto rit = topo_order.rbegin(); rit != topo_order.rend(); ++rit) {
     const NodePtr& ptr = *rit;
+    // skip the current node if it is a variable node
     if (ptr->is_variable()) continue;
 
+    // otherwise gather all the gradient entries and apply the aggregation function
     out_agg_grads.clear();
     std::vector<GradEntry>& out_grad_vec = output_grads.at(ptr);
     for (uint32_t i = 0; i < out_grad_vec.size(); ++i) {
@@ -193,10 +191,73 @@ Graph BuildBackwardGraph(
     }  // for (i ∈ out_grad_vec.size())
 
     if ((*rit)->inputs.size() != 0) {
-      NodePtr fwd_node = ptr;
-      if (mirror_map.size() != 0) {
-        fwd_node = mirror_map.at(ptr).first;
-      }
+      // If the current operator node has inputs, we will have to further
+      // propagate the gradients backward. 
+      NodePtr fwd_node = mirror_map.size() != 0 ? fwd_node = mirror_map.at(ptr).first : ptr;
+      
+      std::vector<NodeEntry> input_grads;
+      if (grad_fun_map.count(ptr->op())) {
+        // The gradient function is applied to the forward operator node (or the
+        // MIRRORED forward operator node if backward mirroring has been
+        // enabled) and the aggregated output gradients.
+        input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
+        if (fwd_node != ptr) {
+          // If backward mirroring has been enabled, check whether the mirrored
+          // forward node is dead or not. The node is deemed as dead if there
+          // is no data dependency between itself and the gradient operator node.
+          bool is_fwd_node_dead;
+          for (NodeEntry& input_grad_entry : input_grads) {
+            for (NodeEntry& input_entry : input_grad_entry.node->inputs) {
+              if (input_entry.node == fwd_node) {
+                is_fwd_node_dead = false;
+              }
+            }
+          }  // for (input_grad_entry ∈ input_grads)
+
+          if (is_fwd_node_dead) {
+            // If the mirrored forward node is dead, we have to replace the
+            // control dependency of the mirrored node with the node in the
+            // original forward graph, and also push the control dependencies
+            // of the mirrored node to the gradient node because the former
+            // is about to be removed.
+            for (NodeEntry& input_grad_entry : input_grads) {
+              for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
+                if (control_dep == fwd_node) {
+                  control_dep = ptr;
+                  for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+                    input_grad_entry.node->control_deps.push_back(
+                        fwd_node_control_dep);
+                  }
+                  break;
+                }
+              }  // for (control_dep ∈ input_grad.control_deps)
+            }  // for (input_grad_entry ∈ input_grads)
+          }  // if (is_fwd_node_dead)
+        }  // if (fwd_node != ptr)
+        CHECK_EQ((*rit)->inputs.size(), input_grads.size())
+            << "Gradient function not returning enough gradient";
+      } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
+        for (size_t i = 0; i < fwd_node->num_inputs(); ++i) {
+          std::ostringstream os;
+          if (1 == fwd_node->num_inputs()) {
+            os << fwd_node->attrs.name << "_backward";
+          } else {
+            os << fwd_node->attrs.name << "_in" << i << "_backward";
+          }
+          auto p = Node::Create();
+          p->attrs.op = zero_ops[0];
+          p->attrs.name = os.str();
+          p->inputs.push_back(fwd_node->inputs[i]);
+          p->control_deps.emplace_back(fwd_node);
+          if (p->op()->attr_parser != nullptr) {
+            p->op()->attr_parser(&(p->attrs));
+          }
+          input_grads.emplace_back(nnvm::NodeEntry{p, 0, 0});
+        }
+      } else {
+        LOG(FATAL) << "Operator " << fwd_node->op()->name << " is non-differentiable "
+                   << "because it didn't register FGradient attribute.";
+      }  // if (grad_fun_map.count(ptr->op()))
     }  // if ((*rit)->inputs.size() != 0)
 
   }  // for (rit ∈ reverse(topo_order))
