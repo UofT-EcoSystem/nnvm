@@ -313,7 +313,7 @@ Graph BuildBackwardGraph(
         unique_grads.emplace(NodeEntry{std::move(copy_node), 0, 0}, std::make_pair(1, counter));
       }
     } else {
-        ret.outputs[counter] = xgrad_entry.sum;
+      ret.outputs[counter] = xgrad_entry.sum;
     }
     ++counter;
   }  // for (e ∈ xs)
