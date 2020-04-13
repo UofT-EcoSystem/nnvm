@@ -31,6 +31,7 @@
 #include <queue>
 #include <algorithm>
 #include <functional>
+#include <unordered_set>
 
 
 namespace nnvm {
@@ -52,13 +53,11 @@ Graph BuildBackwardGraph(
     const Graph& src,
     const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
-    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
-    const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map);
+    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads);
 
 
 Graph Gradient(Graph src) {
-  using nnvm::FGradient;
-
+  const IndexedGraph& idx = src.indexed_graph();
   CHECK_NE(src.attrs.count("grad_xs"), 0U)
       << "Gradient require grad_xs to be presented.";
   CHECK_NE(src.attrs.count("grad_ys"), 0U)
@@ -96,12 +95,9 @@ Graph Gradient(Graph src) {
         << "because it is unreachable from the outputs.";
   }
 
-  std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> > mirror_map;
-
-  // complete the backward graph of the src, but with the mirror map being empty
-  nnvm::Graph gsrc_no_mirroring = BuildBackwardGraph(src, xs,
-          topo_order, output_grads, 
-          mirror_map);  // with the mirroring map being empty
+  // complete the backward graph of the src, but without backward mirroring
+  nnvm::Graph gsrc_no_mirroring = BuildBackwardGraph(src, xs, topo_order,
+                                                     output_grads);
   const IndexedGraph& gsrc_no_mirroring_idx = gsrc_no_mirroring.indexed_graph();
 
   using MirrorFun = std::function<bool(const NodePtr&)>;
@@ -113,29 +109,28 @@ Graph Gradient(Graph src) {
     return gsrc_no_mirroring;
   }
 
-  // record the reference count of each node entry
-  
-  // record the reference count of each node entry
-  // std::vector<uint32_t> gsrc_entry_ref_count(gsrc_no_mirroring_idx.num_node_entries(), 0);
-  // static const auto& fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
-  // for (uint32_t nid = 0; nid < gsrc_no_mirroring_idx.num_nodes(); ++nid) {
-  //   const IndexedGraph::Node& inode = gsrc_no_mirroring_idx[nid];
-  //   if (inode.source->is_variable()) {
-  //     continue;  // variable nodes are ignored
-  //   }
-  //   for (const IndexedGraph::NodeEntry& e : inode.inputs) {
-  //     // increase the entry reference count if it is referenced by an operator input
-  //     ++gsrc_entry_ref_count[gsrc_no_mirroring_idx.entry_id(e)];
-  //   }
-  //   if (fignore_inputs.count(inode.source->op()) != 0) {
-  //     std::vector<uint32_t> ignore_inputs =
-  //         fignore_inputs[inode.source->op()](inode.source->attrs);
-  //     for (const uint32_t i : ignore_inputs) {
-  //       // decrease the entry reference count if it belongs to the ignored inputs
-  //       --gsrc_entry_ref_count[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])];
-  //     }
-  //   }  // if (ignore_inputs)
-  // }  // for (nid ∈ [0, idx.num_nodes())
+  // record, for each node entry ∈ src, the nodes that reference the entry as inputs
+  std::vector<std::unordered_set<const Node*> > entry_ref_map(
+      gsrc_no_mirroring_idx.num_node_entries());
+  static const auto& fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
+  for (uint32_t nid = 0;
+       nid < gsrc_no_mirroring_idx.num_nodes(); ++nid) {
+    const IndexedGraph::Node& inode = gsrc_no_mirroring_idx[nid];
+    if (inode.source->is_variable()) {
+      continue;
+    }
+    for (uint32_t i = 0; i < inode.inputs.size(); ++i) {
+      if (fignore_inputs.count(inode.source->op()) != 0) {
+        std::vector<uint32_t> ignore_inputs =
+            fignore_inputs[inode.source->op()](inode.source->attrs);
+        if (std::find(ignore_inputs.begin(), ignore_inputs.end(), i)
+            != ignore_inputs.end()) {
+          continue;
+        }
+      }
+      entry_ref_map[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])].insert(inode.source);
+    }
+  }  // for (nid ∈ gsrc_no_mirroring.num_nodes)
 
   src.attrs["shape_attr_key"] = std::make_shared<any>(std::string("__shape__"));
   src.attrs["dtype_attr_key"] = std::make_shared<any>(std::string("__dtype__"));
@@ -153,15 +148,22 @@ Graph Gradient(Graph src) {
   while (!worklist.empty()) {
     const NodePtr& workitem = worklist.front();
     if (workitem->is_variable()) continue;
+    if (workitem->attrs.dict.find("__mirror_stage__")
+        != workitem->attrs.dict.end()) {
+      continue;
+    }
 
     // build up the subgraph from the workitem
-    std::set<NodePtr> subgraph;
+    std::unordered_set<NodePtr> subgraph;
     // initialize the subgraph to be the current head and a sub-worklist to be
     // the inputs of the current head
     subgraph.insert(workitem);
     std::queue<NodePtr> subworklist;
     for (NodeEntry& e : workitem->inputs) {
       subworklist.push(e.node);
+    }
+    for (NodePtr& n : workitem->control_deps) {
+      subworklist.push(n);
     }
     // start propagating from this workitem backward until the mirroring
     // function returns false (indicating that a compute-heavy layer has
@@ -175,13 +177,27 @@ Graph Gradient(Graph src) {
         subworklist.pop();
         continue;
       }
-      // otherwise insert the current node to the subgraph
+      // otherwise insert the current node to the subgraph and its inputs into
+      // the sub-worklist
       subgraph.insert(subworkitem);
       for (NodeEntry& e : subworkitem->inputs) {
         subworklist.push(e.node);
       }
+      for (NodePtr& n : subworkitem->control_deps) {
+        subworklist.push(n);
+      }
       subworklist.pop();
     }  // while (!subworklist.empty())
+    // --- backward pass ends here ---
+    // topological order of the subgraph, used for checking whether the subgraph
+    // has converged and the following forward pass
+    std::vector<NodePtr> subgraph_heads = {workitem};
+    std::vector<NodePtr> subgraph_topo_order;
+    bool has_subgraph_converged = false;
+    while (!has_subgraph_converged) {
+      subgraph_topo_order.clear();
+    }  // while (!has_subgraph_converged)
+
     // build the topological order of the subgraph
     worklist.pop();
   }  // while (!worklist.empty)
@@ -213,8 +229,7 @@ Graph BuildBackwardGraph(
     const Graph& src,
     const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
-    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
-    const std::unordered_map<NodePtr, std::pair<NodePtr, NodePtr> >& mirror_map) {
+    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads) {
   // gradient aggregation and attribute hint function (The latter is usually set
   // to NULL by the executor frontend)
   using AggregateFun = std::function<NodeEntry(
@@ -278,8 +293,10 @@ Graph BuildBackwardGraph(
 
     if ((*rit)->inputs.size() != 0) {
       // If the current operator node has inputs, we will have to further
-      // propagate the gradients backward. 
-      NodePtr fwd_node = mirror_map.size() != 0 ? fwd_node = mirror_map.at(ptr).first : ptr;
+      // propagate the gradients backward.
+      // TODO(ArmageddonKnight) Replace the node here with the mirrored 
+      //                        node, if backward mirroring is enabled.
+      NodePtr fwd_node = ptr;
       
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
