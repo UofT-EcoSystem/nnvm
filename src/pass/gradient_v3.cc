@@ -115,9 +115,8 @@ Graph Gradient(Graph src) {
   // ===========================================================================
 
   // record, for each node entry ∈ src, the nodes that reference the entry as inputs
-  std::vector<std::unordered_set<const Node*> >
-      node_ref_map(gsrc_no_mirroring_idx.num_nodes()),
-      node_entry_ref_map(gsrc_no_mirroring_idx.num_node_entries());
+  std::vector<std::unordered_set<const Node*> > node_entry_ref_map(
+      gsrc_no_mirroring_idx.num_node_entries());
   static const auto& fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
   for (uint32_t nid = 0;
        nid < gsrc_no_mirroring_idx.num_nodes(); ++nid) {
@@ -134,7 +133,6 @@ Graph Gradient(Graph src) {
           continue;
         }
       }
-      node_ref_map[inode.inputs[i].node_id].insert(inode.source);
       node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])].insert(inode.source);
     }
   }  // for (nid ∈ gsrc_no_mirroring.num_nodes)
@@ -159,8 +157,7 @@ Graph Gradient(Graph src) {
       continue;
     }
 
-    // subgraph and its topological order
-    std::unordered_set<const Node*> subgraph;
+    // subgraph in topological order
     std::deque<const Node*> subgraph_topo_order;
     // The sub-worklist is used for constructing the subgraph. It is initialized
     // to have the current workitem node.
@@ -174,7 +171,6 @@ Graph Gradient(Graph src) {
     while (!subworklist.empty()) {
       const NodePtr& subworkitem = subworklist.front();
       if (subworkitem->is_variable()) continue;
-      subgraph.insert(subworkitem.get());
       if (std::find(subgraph_topo_order.begin(), subgraph_topo_order.end(), subworkitem)
           == subgraph_topo_order.end()) {
         subgraph_topo_order.push_front(subworkitem.get());
@@ -200,6 +196,7 @@ Graph Gradient(Graph src) {
     // =========================================================================
     bool has_subgraph_converged = false;
     while (!has_subgraph_converged) {
+      has_subgraph_converged = true;
       for (auto nit = subgraph_topo_order.cbegin();
            nit != subgraph_topo_order.cend(); ++nit) {
         const Node* const n = *nit;
@@ -212,13 +209,15 @@ Graph Gradient(Graph src) {
           for (const Node* ref_node : ref_nodes) {
             if (ref_node != n && idx.exist(ref_node) &&
                 subgraph.find(ref_node) == subgraph.end() && mirror_fun(ref_node)) {
-              subgraph.insert(ref_node);
+
+              
+
               // We can safely insert the current node at the end of the list
               // WITHOUT violating the topological order, the reason is because
               // since the node has never been inserted before to the subgraph,
               // neither should its outputs (otherwise it violates the property
-              // of the backward pass). 
-              subgraph_topo_order.push_back(ref_node);
+              // of the backward pass).
+              has_subgraph_converged = false;
             }
           }
         }  // for (e ∈ nit->inputs)
