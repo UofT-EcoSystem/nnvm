@@ -110,10 +110,14 @@ Graph Gradient(Graph src) {
   if (mirror_fun == nullptr) {
     return gsrc_no_mirroring;
   }
+  // ===========================================================================
+  // ----- Gradient Pass w/o Backward Mirroring -----
+  // ===========================================================================
 
   // record, for each node entry ∈ src, the nodes that reference the entry as inputs
-  std::vector<std::unordered_set<const Node*> > entry_ref_map(
-      gsrc_no_mirroring_idx.num_node_entries());
+  std::vector<std::unordered_set<const Node*> >
+      node_ref_map(gsrc_no_mirroring_idx.num_nodes()),
+      node_entry_ref_map(gsrc_no_mirroring_idx.num_node_entries());
   static const auto& fignore_inputs = Op::GetAttr<FIgnoreInputs>("FIgnoreInputs");
   for (uint32_t nid = 0;
        nid < gsrc_no_mirroring_idx.num_nodes(); ++nid) {
@@ -130,7 +134,8 @@ Graph Gradient(Graph src) {
           continue;
         }
       }
-      entry_ref_map[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])].insert(inode.source);
+      node_ref_map[inode.inputs[i].node_id].insert(inode.source);
+      node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])].insert(inode.source);
     }
   }  // for (nid ∈ gsrc_no_mirroring.num_nodes)
 
@@ -149,11 +154,8 @@ Graph Gradient(Graph src) {
   }
   for (; !worklist.empty(); worklist.pop()) {
     const NodePtr& workitem = worklist.front();
-    if (workitem->is_variable()) {
-      continue;
-    }
-    if (workitem->attrs.dict.find("__mirror_stage__")
-        != workitem->attrs.dict.end()) {
+    if (workitem->is_variable() || 
+        workitem->attrs.dict.find("__mirror_stage__") != workitem->attrs.dict.end()) {
       continue;
     }
 
@@ -202,8 +204,7 @@ Graph Gradient(Graph src) {
            nit != subgraph_topo_order.cend(); ++nit) {
         const Node* const n = *nit;
         for (const NodeEntry& e : n->inputs) {
-          const std::unordered_set<const Node*>& ref_nodes =
-              entry_ref_map[gsrc_no_mirroring_idx.entry_id(e)];
+          const auto& ref_nodes = node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(e)];
           // if there are other nodes that reference the node entry and that
           // node (1) belongs to the forward graph, (2) is not part of the
           // subgraph, and (3) passes the mirroring function we add that node to
