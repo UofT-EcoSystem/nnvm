@@ -28,10 +28,12 @@
 #include <nnvm/op_attr_types.h>
 #include <nnvm/pass_functions.h>
 
-#include <queue>
 #include <algorithm>
+#include <deque>
 #include <functional>
+#include <queue>
 #include <unordered_set>
+#include <vector>
 
 
 namespace nnvm {
@@ -100,7 +102,7 @@ Graph Gradient(Graph src) {
                                                      output_grads);
   const IndexedGraph& gsrc_no_mirroring_idx = gsrc_no_mirroring.indexed_graph();
 
-  using MirrorFun = std::function<bool(const NodePtr&)>;
+  using MirrorFun = std::function<bool(const Node* const)>;
   MirrorFun mirror_fun = nullptr;
   if (src.attrs.count("mirror_fun") != 0) {
     mirror_fun = src.GetAttr<MirrorFun>("mirror_fun");
@@ -145,61 +147,82 @@ Graph Gradient(Graph src) {
   for (const NodeEntry& e : src.outputs) {
     worklist.push(e.node);
   }
-  while (!worklist.empty()) {
+  for (; !worklist.empty(); worklist.pop()) {
     const NodePtr& workitem = worklist.front();
-    if (workitem->is_variable()) continue;
+    if (workitem->is_variable()) {
+      continue;
+    }
     if (workitem->attrs.dict.find("__mirror_stage__")
         != workitem->attrs.dict.end()) {
       continue;
     }
 
-    // build up the subgraph from the workitem
-    std::unordered_set<NodePtr> subgraph;
-    // initialize the subgraph to be the current head and a sub-worklist to be
-    // the inputs of the current head
-    subgraph.insert(workitem);
+    // subgraph and its topological order
+    std::unordered_set<const Node*> subgraph;
+    std::deque<const Node*> subgraph_topo_order;
+    // The sub-worklist is used for constructing the subgraph. It is initialized
+    // to have the current workitem node.
     std::queue<NodePtr> subworklist;
-    for (NodeEntry& e : workitem->inputs) {
-      subworklist.push(e.node);
-    }
-    for (NodePtr& n : workitem->control_deps) {
-      subworklist.push(n);
-    }
-    // start propagating from this workitem backward until the mirroring
-    // function returns false (indicating that a compute-heavy layer has
-    // been encountered)
+    subworklist.push(workitem);
+    // Start propagating from the current workitem node backward until the
+    // mirroring function returns false (indicating that a compute-heavy layer
+    // has been hit), in which case we put the node that fails the mirroring
+    // function into the worklist as the new head. During the traversal, we
+    // build up the subgraph and its topological order at the same time.
     while (!subworklist.empty()) {
       const NodePtr& subworkitem = subworklist.front();
       if (subworkitem->is_variable()) continue;
-      if (!mirror_fun(subworkitem)) {
-        // if the current node is compute-heavy, we push it to the worklist as the new head
-        worklist.push(subworkitem);
-        subworklist.pop();
-        continue;
+      subgraph.insert(subworkitem.get());
+      if (std::find(subgraph_topo_order.begin(), subgraph_topo_order.end(), subworkitem)
+          == subgraph_topo_order.end()) {
+        subgraph_topo_order.push_front(subworkitem.get());
       }
-      // otherwise insert the current node to the subgraph and its inputs into
-      // the sub-worklist
-      subgraph.insert(subworkitem);
-      for (NodeEntry& e : subworkitem->inputs) {
+      for (const NodeEntry& e : subworkitem->inputs) {
+        if (!mirror_fun(e.node.get())) {
+          worklist.push(e.node);
+          continue;
+        }
         subworklist.push(e.node);
       }
-      for (NodePtr& n : subworkitem->control_deps) {
+      for (const NodePtr& n : subworkitem->control_deps) {
+        if (!mirror_fun(n.get())) {
+          worklist.push(n);
+          continue;
+        }
         subworklist.push(n);
       }
       subworklist.pop();
     }  // while (!subworklist.empty())
-    // --- backward pass ends here ---
-    // topological order of the subgraph, used for checking whether the subgraph
-    // has converged and the following forward pass
-    std::vector<NodePtr> subgraph_heads = {workitem};
-    std::vector<NodePtr> subgraph_topo_order;
+    // =========================================================================
+    // ----- Backward Pass Ends Here -----
+    // =========================================================================
     bool has_subgraph_converged = false;
     while (!has_subgraph_converged) {
-      subgraph_topo_order.clear();
+      for (auto nit = subgraph_topo_order.cbegin();
+           nit != subgraph_topo_order.cend(); ++nit) {
+        const Node* const n = *nit;
+        for (const NodeEntry& e : n->inputs) {
+          const std::unordered_set<const Node*>& ref_nodes =
+              entry_ref_map[gsrc_no_mirroring_idx.entry_id(e)];
+          // if there are other nodes that reference the node entry and that
+          // node (1) belongs to the forward graph, (2) is not part of the
+          // subgraph, and (3) passes the mirroring function we add that node to
+          // the subgraph and adjust the topological order accordingly
+          for (const Node* ref_node : ref_nodes) {
+            if (ref_node != n && idx.exist(ref_node) &&
+                subgraph.find(ref_node) == subgraph.end() && mirror_fun(ref_node)) {
+              subgraph.insert(ref_node);
+              // We can safely insert the current node at the end of the list
+              // WITHOUT violating the topological order, the reason is because
+              // since the node has never been inserted before to the subgraph,
+              // neither should its outputs (otherwise it violates the property
+              // of the backward pass). 
+              subgraph_topo_order.push_back(ref_node);
+            }
+          }
+        }  // for (e ∈ nit->inputs)
+      }  // for (nit ∈ subgraph_topo_order)
     }  // while (!has_subgraph_converged)
-
-    // build the topological order of the subgraph
-    worklist.pop();
   }  // while (!worklist.empty)
 }
 
