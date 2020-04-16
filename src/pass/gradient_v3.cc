@@ -183,8 +183,8 @@ Graph Gradient(Graph src) {
   }
   for (; !worklist.empty(); worklist.pop()) {
     const Node* const workitem = worklist.front();
-    if (workitem->is_variable() || 
-        workitem->attrs.dict.find("__mirror_stage__") != workitem->attrs.dict.end()) {
+    if (workitem->is_variable() ||
+        mirror_map.find(workitem) != mirror_map.end()) {
       continue;
     }
 
@@ -298,6 +298,7 @@ Graph Gradient(Graph src) {
       }
     }  // for (subgraph_node ∈ subgraph_nodes)
     for (const Node* subgraph_node : subgraph_topo_order) {
+      mirror_map[subgraph_node] = nullptr;
       if (mirror_fun(subgraph_node)) {
         // if the node satisfies the mirroring function, we compare the memory
         // allocated vs. the memory released by forward propagating the node
@@ -350,6 +351,7 @@ Graph Gradient(Graph src) {
     // ----- Forward Pass Ends Here -----
     // =========================================================================
   }  // while (!worklist.empty)
+  return BuildBackwardGraph(src, xs, topo_order, output_grads, mirror_map);
 }
 
 // Given the list of gradient entries and zero operators, check whether all the

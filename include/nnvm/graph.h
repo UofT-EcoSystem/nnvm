@@ -238,9 +238,12 @@ inline T Graph::MoveCopyAttr(const std::string& attr_name) {
   }
 }
 
-template <typename GNode, typename HashType,
-           typename FVisit, typename HashFunc,
-          typename InDegree, typename GetInput>
+template <typename GNode,
+          typename HashType,
+          typename FVisit,
+          typename HashFunc,
+          typename InDegree,
+          typename GetInput>
 void PostOrderDFSVisit(const std::vector<GNode>& heads,
                        FVisit fvisit,
                        HashFunc hash,
@@ -274,7 +277,7 @@ void PostOrderDFSVisit(const std::vector<GNode>& heads,
 template<typename FVisit>
 inline void DFSVisit(const std::vector<NodeEntry>& heads,
                      FVisit fvisit) {
-  typedef const NodePtr* GNode;
+  typedef NodePtr* GNode;
   std::vector<GNode> head_nodes(heads.size());
   std::transform(heads.begin(), heads.end(), head_nodes.begin(),
                  [](const NodeEntry& e)->GNode {
@@ -282,13 +285,13 @@ inline void DFSVisit(const std::vector<NodeEntry>& heads,
                  });
   PostOrderDFSVisit<GNode, Node*>(
       head_nodes,
-      [fvisit](GNode n) { fvisit(*n); },  // FVisit
-      [](GNode n)->Node* { return n->get(); },  // HashFunc
-      [](GNode n)->uint32_t {  // InDegree
+      [fvisit](GNode n) { fvisit(*n); },        // fvisit
+      [](GNode n)->Node* { return n->get(); },  // hash
+      [](GNode n)->uint32_t {                   // indegree
         if (!(*n)) return 0;
         return (*n)->inputs.size() + (*n)->control_deps.size();
       },
-      [](GNode n, uint32_t index)->GNode {  // GetInput
+      [](GNode n, uint32_t index)->GNode {      // getinput
         if (index < (*n)->inputs.size()) {
           return &(*n)->inputs.at(index).node;
         } else {
