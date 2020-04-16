@@ -340,7 +340,9 @@ Graph Gradient(Graph src) {
           }
           std::vector<NodeEntry> input_grads =
               grad_fun_map[subgraph_node->op()](fake_out_grad_node, fake_out_grads);
-
+          if (IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
+            mirror_map[subgraph_node] = fake_out_grad_node;
+          }
         }
       }  // if (mirror_fun(subgraph_node))
     }  // for (subgraph_node ∈ subgraph_topo_order)
