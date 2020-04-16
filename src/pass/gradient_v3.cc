@@ -105,12 +105,12 @@ Graph Gradient(Graph src) {
   std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads;
 
   DFSVisit(ys,
-      [&](const NodePtr& node) {
-        if (output_grads.count(node) == 0) {
-          output_grads[node].resize(node->num_outputs());
-        }
-        topo_order.push_back(node);
-      });
+           [&](const NodePtr& node) {
+             if (output_grads.count(node) == 0) {
+               output_grads[node].resize(node->num_outputs());
+             }
+             topo_order.push_back(node);
+           });
   for (size_t i = 0; i < ys.size(); ++i) {
     output_grads[ys[i].node][ys[i].index].grads = {ys_out_grad[i]};
   }
@@ -351,6 +351,18 @@ Graph Gradient(Graph src) {
     // ----- Forward Pass Ends Here -----
     // =========================================================================
   }  // while (!worklist.empty)
+  DFSVisit(ys,
+           [&](NodePtr& node) {
+             if (mirror_map[node.get()] != nullptr) {
+               if (mirror_fun(node.get())) {
+                 node->attrs.dict["__mirror_stage__"] = 2;
+               } else {
+                 node->attrs.dict["__mirror_stage__"] = 1;
+               }
+             } else {
+               node->attrs.dict["__mirror_stage__"] = 0;
+             }
+           });
   return BuildBackwardGraph(src, xs, topo_order, output_grads, mirror_map);
 }
 
@@ -439,7 +451,8 @@ Graph BuildBackwardGraph(
     if ((*rit)->inputs.size() != 0) {
       // If the current operator node has inputs, we will have to further
       // propagate the gradients backward.
-      NodePtr fwd_node = mirror_map.find(ptr.get()) == mirror_map.end() ?
+      NodePtr fwd_node = (mirror_map.empty() ||
+                          mirror_map.at(ptr.get()) == nullptr) ?
                          ptr : mirror_map.at(ptr.get());
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
