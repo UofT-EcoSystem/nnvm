@@ -352,7 +352,7 @@ Graph Gradient(Graph src) {
     // =========================================================================
   }  // while (!worklist.empty)
   DFSVisit(ys,
-           [&](NodePtr& node) {
+           [&](const NodePtr& node) {
              if (mirror_map[node.get()] != nullptr) {
                if (mirror_fun(node.get())) {
                  node->attrs.dict["__mirror_stage__"] = "2";
