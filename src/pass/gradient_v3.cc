@@ -355,12 +355,12 @@ Graph Gradient(Graph src) {
            [&](NodePtr& node) {
              if (mirror_map[node.get()] != nullptr) {
                if (mirror_fun(node.get())) {
-                 node->attrs.dict["__mirror_stage__"] = 2;
+                 node->attrs.dict["__mirror_stage__"] = "2";
                } else {
-                 node->attrs.dict["__mirror_stage__"] = 1;
+                 node->attrs.dict["__mirror_stage__"] = "1";
                }
              } else {
-               node->attrs.dict["__mirror_stage__"] = 0;
+               node->attrs.dict["__mirror_stage__"] = "0";
              }
            });
   return BuildBackwardGraph(src, xs, topo_order, output_grads, mirror_map);
