@@ -47,7 +47,6 @@ struct GradEntry {
   NodeEntry sum{nullptr, 0, 0};
 #endif
   std::vector<NodeEntry> grads;
-  bool need_attr_hint{true};
 };
 
 /// @brief Build a backward graph from the mirroring function.
@@ -80,7 +79,8 @@ Graph Gradient(Graph src) {
   std::vector<NodePtr> topo_order;
   std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads;
 
-  DFSVisit(ys, [&](const NodePtr& node) {
+  DFSVisit(ys,
+      [&](const NodePtr& node) {
         if (output_grads.count(node) == 0) {
           output_grads[node].resize(node->num_outputs());
         }
@@ -114,9 +114,8 @@ Graph Gradient(Graph src) {
     return gsrc_no_mirroring;
   }
   // ===========================================================================
-  // ----- Gradient Pass w/o Backward Mirroring -----
+  // ----- Gradient Pass w/ Backward Mirroring -----
   // ===========================================================================
-
   // record, for each node entry ∈ src, the nodes that reference the entry as inputs
   std::vector<std::unordered_set<const Node*> > node_entry_ref_map(
       gsrc_no_mirroring_idx.num_node_entries());
@@ -149,6 +148,8 @@ Graph Gradient(Graph src) {
   // Since the storage allocator always assume 32-bit, the data type vector is
   // not used here.
 
+  static auto& grad_fun_map = Op::GetAttr<FGradient>("FGradient");
+
   // apply the backward mirroring heuristics
   std::queue<const Node*> worklist;
   // initialize the worklist to the output nodes
@@ -163,7 +164,8 @@ Graph Gradient(Graph src) {
     }
 
     // subgraph and its nodes in topological order
-    std::set<const Node*> subgraph; std::deque<const Node*> subgraph_topo_order;
+    std::unordered_set<const Node*> subgraph;
+    std::deque<const Node*> subgraph_topo_order;
     // The sub-worklist is used for constructing the subgraph. It is initialized
     // to have the current workitem node.
     std::queue<const Node*> subworklist;
@@ -289,18 +291,30 @@ Graph Gradient(Graph src) {
         }
         if (released_memory > newly_allocated_memory) {
           // mark node as to be mirrored
-          NodePtr mirror_node = Node::Create();
-          *mirror_node = *subgraph_node;
-          mirror_node->attrs.name += "_mirror";
-          for (NodeEntry& e : mirror_node->inputs) {
+          NodePtr subgraph_node_mirror = Node::Create();
+          *subgraph_node_mirror = *subgraph_node;
+          subgraph_node_mirror->attrs.name += "_mirror";
+          for (NodeEntry& e : subgraph_node_mirror->inputs) {
             e.node = mirror_map.at(e.node.get());
           }
-          for (NodePtr& n : mirror_node->control_deps) {
+          for (NodePtr& n : subgraph_node_mirror->control_deps) {
             n = mirror_map.at(n.get());
           }
+          mirror_map[subgraph_node] = subgraph_node_mirror;
         }  // if (released_memory > newly_allocated_memory)
       } else {
-        // check the data dependency 
+        // If the subgraph node fails the mirorring condition, it is however
+        // still possible for it to be mirrored under the condition that its
+        // corresponding gradient node only has data dependencies on its inputs.
+        NodePtr fake_out_grad_node = Node::Create();
+        *fake_out_grad_node = *subgraph_node;
+        if (grad_fun_map.count(subgraph_node->op())) {
+          std::vector<NodeEntry> fake_out_grads;
+          for (uint32_t oid = 0; oid < subgraph_) {
+
+
+          }
+        }
       }  // if (mirror_fun(subgraph_node))
     }  // for (subgraph_node ∈ subgraph_topo_order)
     // =========================================================================
@@ -335,7 +349,8 @@ Graph BuildBackwardGraph(
     const Graph& src,
     const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
-    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads) {
+    std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
+    const std::unordered_map<const Node*, NodePtr>& mirror_map) {
   // gradient aggregation and attribute hint function (The latter is usually set
   // to NULL by the executor frontend)
   using AggregateFun = std::function<NodeEntry(
@@ -360,12 +375,8 @@ Graph BuildBackwardGraph(
           return NodeEntry{grad_agg_node, 0, 0};
         }
       };
-  AttrHintFun attr_hint_fun = nullptr;
   if (src.attrs.count("aggregate_fun") != 0) {
     aggregate_fun = src.GetAttr<AggregateFun>("aggregate_fun");
-  }
-  if (src.attrs.count("attr_hint_fun") != 0) {
-    attr_hint_fun = src.GetAttr<AttrHintFun> ("attr_hint_fun");
   }
 
   // zero and copy operators
@@ -391,19 +402,14 @@ Graph BuildBackwardGraph(
     for (uint32_t i = 0; i < out_grad_vec.size(); ++i) {
       GradEntry& grad_entry = out_grad_vec[i];
       grad_entry.sum = aggregate_fun(std::move(grad_entry.grads));
-      if (grad_entry.need_attr_hint && attr_hint_fun != nullptr) {
-        grad_entry.sum = attr_hint_fun(grad_entry.sum, NodeEntry{ptr, 0, i});
-      }
       out_agg_grads.push_back(grad_entry.sum);
     }  // for (i ∈ out_grad_vec.size())
 
     if ((*rit)->inputs.size() != 0) {
       // If the current operator node has inputs, we will have to further
       // propagate the gradients backward.
-      // TODO(ArmageddonKnight) Replace the node here with the mirrored 
-      //                        node, if backward mirroring is enabled.
-      NodePtr fwd_node = ptr;
-      
+      NodePtr fwd_node = mirror_map.find(ptr.get()) == mirror_map.end() ?
+                         ptr : mirror_map.at(ptr.get());
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
         // The gradient function is applied to the forward operator node (or the
@@ -422,7 +428,6 @@ Graph BuildBackwardGraph(
               }
             }
           }  // for (input_grad_entry ∈ input_grads)
-
           if (is_fwd_node_dead) {
             // If the mirrored forward node is dead, we have to replace the
             // control dependency of the mirrored node with the node in the
@@ -473,15 +478,9 @@ Graph BuildBackwardGraph(
       }  // if (grad_fun_map.count(ptr->op()))
       auto git = input_grads.begin();
       for (auto it = (*rit)->inputs.begin(); it != (*rit)->inputs.end(); ++it, ++git) {
-        GradEntry& ge = output_grads[it->node][it->index];
-        // If any of the backward op can do shape inference, the attribute hint
-        // is not necessary.
-        if (finfer_shape.count(git->node->op())) {
-          ge.need_attr_hint = false;
-        }
         // move the input gradients of the node entries to the output gradients
         // of the next node in reverse topological orders
-        ge.grads.emplace_back(std::move(*git));
+        output_grads[it->node][it->index].grads.emplace_back(std::move(*git));
       }  // for (it ∈ rit->inputs, git ∈ input_grads)
     }  // if ((*rit)->inputs.size() != 0)
   }  // for (rit ∈ reverse(topo_order))
@@ -496,10 +495,6 @@ Graph BuildBackwardGraph(
     // aggregate the gradients for every x, similar to what we did previously
     if (xgrad_entry.sum.node.get() == nullptr) {
       xgrad_entry.sum = aggregate_fun(std::move(xgrad_entry.grads));
-      if (xgrad_entry.need_attr_hint &&
-          attr_hint_fun != nullptr) {
-        xgrad_entry.sum = attr_hint_fun(xgrad_entry.sum, x);
-      }
     }
     if (copy_op != nullptr) {
       auto kv = unique_grads.find(xgrad_entry.sum);
