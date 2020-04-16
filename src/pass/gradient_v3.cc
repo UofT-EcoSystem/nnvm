@@ -49,13 +49,38 @@ struct GradEntry {
   std::vector<NodeEntry> grads;
 };
 
-/// @brief Build a backward graph from the mirroring function.
+/*!
+ * \brief Build a backward graph from the mirroring function.
+ */
 Graph BuildBackwardGraph(
     const Graph& src,
     const std::vector<NodeEntry>& xs,
     const std::vector<NodePtr>& topo_order,
     std::unordered_map<NodePtr, std::vector<GradEntry> > output_grads,
     const std::unordered_map<const Node*, NodePtr>& mirror_map);
+
+
+/*!
+ * \brief Auxiliary function that checks the data dependency between the forward
+ *        node and the gradient node, and will return true if the gradient
+ *        dependencies are only on the inputs of the forward node.
+ */
+inline bool IsGradDepOnlyOnFwdInputs(
+    const std::vector<NodeEntry>& input_grads,
+    const NodePtr& fwd_node) {
+  bool is_grad_dep_only_on_fwd_inputs = false;
+  for (const NodeEntry& input_grad_entry : input_grads) {
+    for (const NodeEntry& input_grad_input_entry :
+         input_grad_entry.node->inputs) {
+      if (input_grad_input_entry.node == fwd_node) {
+        is_grad_dep_only_on_fwd_inputs = true;
+        break;
+      }
+    }
+    if (is_grad_dep_only_on_fwd_inputs) break;
+  }
+  return is_grad_dep_only_on_fwd_inputs;
+}
 
 
 Graph Gradient(Graph src) {
@@ -310,10 +335,12 @@ Graph Gradient(Graph src) {
         *fake_out_grad_node = *subgraph_node;
         if (grad_fun_map.count(subgraph_node->op())) {
           std::vector<NodeEntry> fake_out_grads;
-          for (uint32_t oid = 0; oid < subgraph_) {
-
-
+          for (uint32_t oid = 0; oid < fake_out_grad_node->num_outputs(); ++oid) {
+            fake_out_grads.push_back(NodeEntry{fake_out_grad_node, oid, 0});
           }
+          std::vector<NodeEntry> input_grads =
+              grad_fun_map[subgraph_node->op()](fake_out_grad_node, fake_out_grads);
+
         }
       }  // if (mirror_fun(subgraph_node))
     }  // for (subgraph_node ∈ subgraph_topo_order)
@@ -420,7 +447,7 @@ Graph BuildBackwardGraph(
           // If backward mirroring has been enabled, check whether the mirrored
           // forward node is dead or not. The node is deemed as dead if there
           // is no data dependency between itself and the gradient operator node.
-          bool is_fwd_node_dead;
+          bool is_fwd_node_dead = true;
           for (NodeEntry& input_grad_entry : input_grads) {
             for (NodeEntry& input_entry : input_grad_entry.node->inputs) {
               if (input_entry.node == fwd_node) {
