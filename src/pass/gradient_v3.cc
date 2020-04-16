@@ -445,42 +445,27 @@ Graph BuildBackwardGraph(
         // MIRRORED forward operator node if backward mirroring has been
         // enabled) and the aggregated output gradients.
         input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
-        if (fwd_node != ptr) {
-          // If backward mirroring has been enabled, check whether the mirrored
-          // forward node is dead or not. The node is deemed as dead if there
-          // is no data dependency between itself and the gradient operator node.
-          bool is_fwd_node_dead = true;
+        if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
+          // If the mirrored forward node is dead, we have to replace the
+          // control dependency of the mirrored node with the node in the
+          // original forward graph.
           for (NodeEntry& input_grad_entry : input_grads) {
-            for (NodeEntry& input_entry : input_grad_entry.node->inputs) {
-              if (input_entry.node == fwd_node) {
-                is_fwd_node_dead = false;
+            for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
+              if (control_dep == fwd_node) {
+                control_dep = ptr;
+                for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+                  input_grad_entry.node->control_deps.push_back(
+                      fwd_node_control_dep);
+                }
+                break;
               }
+            }  // for (control_dep ∈ input_grad.control_deps)
+            for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+              input_grad_entry.node->control_deps.push_back(
+                  fwd_node_control_dep);
             }
           }  // for (input_grad_entry ∈ input_grads)
-          if (is_fwd_node_dead) {
-            // If the mirrored forward node is dead, we have to replace the
-            // control dependency of the mirrored node with the node in the
-            // original forward graph, and also push the control dependencies
-            // of the mirrored node to the gradient node because the former
-            // is about to be removed.
-            for (NodeEntry& input_grad_entry : input_grads) {
-              for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
-                if (control_dep == fwd_node) {
-                  control_dep = ptr;
-                  for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
-                    input_grad_entry.node->control_deps.push_back(
-                        fwd_node_control_dep);
-                  }
-                  break;
-                }
-              }  // for (control_dep ∈ input_grad.control_deps)
-              for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
-                input_grad_entry.node->control_deps.push_back(
-                    fwd_node_control_dep);
-              }
-            }  // for (input_grad_entry ∈ input_grads)
-          }  // if (is_fwd_node_dead)
-        }  // if (fwd_node != ptr)
+        }  // if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs)
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
