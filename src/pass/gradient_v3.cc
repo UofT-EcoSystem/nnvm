@@ -239,6 +239,9 @@ Graph GradientV3(Graph src) {
     while (!has_subgraph_converged) {
       has_subgraph_converged = true;
       for (const Node* subgraph_node : subgraph_topo_order) {
+
+        LOG(INFO) << "Processing Subgraph Node: " << subgraph_node->attrs.name;
+
         for (const NodeEntry& subgraph_node_entry :
              subgraph_node->inputs) {
           const std::unordered_set<const Node*>& ref_nodes =
@@ -250,6 +253,9 @@ Graph GradientV3(Graph src) {
           //   (3) passes the mirroring function
           // we add that node to the subgraph and adjust the topological order
           for (const Node* ref_node : ref_nodes) {
+
+            LOG(INFO) << "Processing Reference Node: " << ref_node->attrs.name;
+
             if (ref_node != subgraph_node && idx.exist(ref_node) &&
                 subgraph.find(ref_node) == subgraph.end() &&
                 mirror_fun(ref_node)) {
