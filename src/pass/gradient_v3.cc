@@ -285,6 +285,7 @@ Graph GradientV3(Graph src) {
         }
       }  // for (subgraph_node ∈ subgraph_topo_order)
     }  // while (!has_subgraph_converged)
+    LOG(INFO) << "Subgraph Size: " << subgraph.size();
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
     // =========================================================================
