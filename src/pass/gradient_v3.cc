@@ -323,11 +323,15 @@ Graph GradientV3(Graph src) {
           NodePtr subgraph_node_mirror = Node::Create();
           *subgraph_node_mirror = *subgraph_node;
           subgraph_node_mirror->attrs.name += "_mirror";
+          std::unordered_map<const Node*, NodePtr> ::iterator mirror_map_iter;
           for (NodeEntry& e : subgraph_node_mirror->inputs) {
-            e.node = mirror_map.at(e.node.get());
+            mirror_map_iter = mirror_map.find(e.node.get());
+            e.node = mirror_map_iter == mirror_map.end() ?
+                     e.node : mirror_map_iter->second;
           }
           for (NodePtr& n : subgraph_node_mirror->control_deps) {
-            n = mirror_map.at(n.get());
+            mirror_map_iter = mirror_map.find(n.get());
+            n = mirror_map_iter == mirror_map.end() ? n : mirror_map_iter->second;
           }
           mirror_map[subgraph_node] = subgraph_node_mirror;
         }  // if (released_memory > newly_allocated_memory)
