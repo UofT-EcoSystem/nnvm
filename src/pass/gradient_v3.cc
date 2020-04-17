@@ -209,6 +209,7 @@ Graph GradientV3(Graph src) {
             if (subworkitem->is_variable()) continue;
             if (subgraph.find(subworkitem) == subgraph.end()) {
               subgraph.insert(subworkitem);
+              subworklist_topo_order.push_front(subworkitem);
             }
             for (const NodeEntry& e : subworkitem->inputs) {
               if (!mirror_fun(e.node.get())) {
