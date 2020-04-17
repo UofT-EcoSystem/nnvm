@@ -202,7 +202,7 @@ Graph GradientV3(Graph src) {
     // build up the subgraph and its topological order at the same time.
     auto subworklist_backprop = [&subworklist, &subgraph,
                                  &subgraph_topo_order,
-                                 &mirror_fun, &worklist]()->std::deque<const Node*> {
+                                 &mirror_fun, &worklist]() {
           std::deque<const Node*> subworklist_topo_order;
           for (; !subworklist.empty(); subworklist.pop()) {
             const Node* const subworkitem = subworklist.front();
