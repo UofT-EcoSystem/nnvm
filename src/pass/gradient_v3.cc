@@ -285,7 +285,19 @@ Graph GradientV3(Graph src) {
                   }
                 }  // for (oid ∈ [0, ref_node_head->num_outputs()))
               }  // while (!ref_node_heads.empty())
+
+              LOG(INFO) << "Subgraph in Topo-Order: ";
+              for (const Node* n : subgraph_topo_order)
+                std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+              std::cout << std::endl;
+
               subworklist_backprop();
+
+              LOG(INFO) << "Subgraph in Topo-Order: ";
+              for (const Node* n : subgraph_topo_order)
+                std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+              std::cout << std::endl;
+
               // We can safely insert the current node at the end of the list
               // WITHOUT violating the topological order, the reason is because
               // since the node has never been inserted before to the subgraph,
