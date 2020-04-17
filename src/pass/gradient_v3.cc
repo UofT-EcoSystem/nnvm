@@ -270,12 +270,16 @@ Graph GradientV3(Graph src) {
 
                 if (!mirror_fun(ref_node_head)) {
                   subworklist.push(ref_node_head);
+                  continue;
                 }
                 uint32_t nid = idx.node_id(ref_node_head);
                 for (uint32_t oid = 0; oid < ref_node_head->num_outputs(); ++oid) {
                   uint32_t eid = idx.entry_id(nid, oid);
                   for (const Node* const n : node_entry_ref_map[eid]) {
                     if (idx.exist(n)) {
+                      
+                      LOG(INFO) << "Pushing " << ref_node_head->attrs.name << " to the ref_node_heads";
+
                       ref_node_heads.push(n);
                     }
                   }
