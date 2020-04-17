@@ -218,16 +218,16 @@ Graph GradientV3(Graph src) {
             for (const NodeEntry& e : subworkitem->inputs) {
               if (!mirror_fun(e.node.get())) {
                 worklist.push(e.node.get());
-                continue;
+              } else {
+                subworklist.push(e.node.get());
               }
-              subworklist.push(e.node.get());
             }
             for (const NodePtr& n : subworkitem->control_deps) {
               if (!mirror_fun(n.get())) {
                 worklist.push(n.get());
-                continue;
+              } else {
+                subworklist.push(n.get());
               }
-              subworklist.push(n.get());
             }
           }  // while (!subworklist.empty())
           subgraph_topo_order.insert(subgraph_topo_order.end(),
