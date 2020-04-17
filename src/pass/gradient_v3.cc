@@ -207,22 +207,18 @@ Graph GradientV3(Graph src) {
           for (; !subworklist.empty(); subworklist.pop()) {
             const Node* const subworkitem = subworklist.front();
             if (subworkitem->is_variable()) continue;
+            if (!mirror_fun(subworkitem)) {
+              worklist.push(subworkitem);
+              continue;
+            }
             if (subgraph.find(subworkitem) == subgraph.end()) {
               subgraph.insert(subworkitem);
               subworklist_topo_order.push_front(subworkitem);
             }
             for (const NodeEntry& e : subworkitem->inputs) {
-              if (!mirror_fun(e.node.get())) {
-                worklist.push(e.node.get());
-                continue;
-              }
               subworklist.push(e.node.get());
             }
             for (const NodePtr& n : subworkitem->control_deps) {
-              if (!mirror_fun(n.get())) {
-                worklist.push(n.get());
-                continue;
-              }
               subworklist.push(n.get());
             }
           }  // while (!subworklist.empty())
@@ -290,6 +286,7 @@ Graph GradientV3(Graph src) {
               for (const Node* n : subgraph_topo_order)
                 std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
               std::cout << std::endl;
+              std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
 
               subworklist_backprop();
 
@@ -297,6 +294,7 @@ Graph GradientV3(Graph src) {
               for (const Node* n : subgraph_topo_order)
                 std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
               std::cout << std::endl;
+              std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
 
               // We can safely insert the current node at the end of the list
               // WITHOUT violating the topological order, the reason is because
