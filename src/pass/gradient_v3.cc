@@ -293,7 +293,7 @@ Graph GradientV3(Graph src) {
       CHECK(idx.exist(subgraph_node)) << "Every subgraph node must be part of the forward graph.";
       uint32_t nid = idx.node_id(subgraph_node);
       for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
-        uint32_t eid = idx.entry_id(idx.node_id(subgraph_node), oid);
+        uint32_t eid = idx.entry_id(nid, oid);
         subgraph_node_entry_ref_cnt[eid] = node_entry_ref_map[eid].size();
       }
     }  // for (subgraph_node ∈ subgraph_nodes)
@@ -398,9 +398,6 @@ Graph BuildBackwardGraph(
   // to NULL by the executor frontend)
   using AggregateFun = std::function<NodeEntry(
       std::vector<NodeEntry>&& inputs)>;
-  using AttrHintFun = std::function<NodeEntry(
-      const NodeEntry& src,
-      const NodeEntry& like)>;
   AggregateFun aggregate_fun =
       [](std::vector<NodeEntry>&& v)->NodeEntry {
         if (v.size() == 1) {
@@ -431,7 +428,6 @@ Graph BuildBackwardGraph(
       Op::Get(src.GetAttr<std::string>("copy_op_str")) : nullptr;
 
   static auto& grad_fun_map = Op::GetAttr<FGradient>("FGradient");
-  static auto& finfer_shape = Op::GetAttr<FInferShape>("FInferShape");
 
   std::vector<NodeEntry> out_agg_grads;
   for (auto rit = topo_order.rbegin(); rit != topo_order.rend(); ++rit) {

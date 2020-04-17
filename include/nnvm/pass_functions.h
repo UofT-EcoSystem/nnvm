@@ -264,7 +264,7 @@ inline Graph GradientV3(
     std::vector<NodeEntry> ys_out_grad,
     std::function<NodeEntry(std::vector<NodeEntry>&& inputs)>
         aggregate_fun = nullptr,
-    std::function<bool(const NodePtr& node_ptr)> mirror_fun = nullptr,
+    std::function<bool(const Node* const)> mirror_fun = nullptr,
     std::vector<const Op*> zero_ops = std::vector<const Op*>(),
     std::string copy_op_str = std::string(),
     ShapeVector in_arg_shapes = std::vector<TShape>(),
