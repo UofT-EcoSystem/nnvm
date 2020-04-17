@@ -293,7 +293,8 @@ Graph GradientV3(Graph src) {
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
     LOG(INFO) << "Subgraph in Topo-Order: ";
     for (const Node* n : subgraph_topo_order)
-      LOG(INFO) << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+      std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+    std::cout << std::endl;
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
     // =========================================================================
