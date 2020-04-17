@@ -231,6 +231,7 @@ Graph GradientV3(Graph src) {
                                      subworklist_topo_order.end());
         };
     subworklist_backprop();
+    LOG(INFO) << "Backward Pass Ends Here";
     // =========================================================================
     // ----- Backward Pass Ends Here -----
     // =========================================================================
@@ -250,7 +251,8 @@ Graph GradientV3(Graph src) {
           // we add that node to the subgraph and adjust the topological order
           for (const Node* ref_node : ref_nodes) {
             if (ref_node != subgraph_node && idx.exist(ref_node) &&
-                subgraph.find(ref_node) == subgraph.end() && mirror_fun(ref_node)) {
+                subgraph.find(ref_node) == subgraph.end() &&
+                mirror_fun(ref_node)) {
               // forward propagate from the reference node until the mirroring
               // function returns false
               std::queue<const Node*> ref_node_heads;
@@ -268,7 +270,7 @@ Graph GradientV3(Graph src) {
                       ref_node_heads.push(n);
                     }
                   }
-                }
+                }  // for (oid ∈ [0, ref_node_head->num_outputs()))
               }  // while (!ref_node_heads.empty())
               subworklist_backprop();
               // We can safely insert the current node at the end of the list
@@ -295,6 +297,7 @@ Graph GradientV3(Graph src) {
     for (const Node* n : subgraph_topo_order)
       std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
     std::cout << std::endl;
+    LOG(INFO) << "Subgraph Construction Ends Here";
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
     // =========================================================================
@@ -361,6 +364,7 @@ Graph GradientV3(Graph src) {
         }
       }  // if (mirror_fun(subgraph_node))
     }  // for (subgraph_node ∈ subgraph_topo_order)
+    LOG(INFO) << "Forward Pass Ends Here";
     // =========================================================================
     // ----- Forward Pass Ends Here -----
     // =========================================================================
