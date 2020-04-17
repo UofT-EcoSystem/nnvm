@@ -277,8 +277,8 @@ Graph GradientV3(Graph src) {
                   uint32_t eid = idx.entry_id(nid, oid);
                   for (const Node* const n : node_entry_ref_map[eid]) {
                     if (idx.exist(n)) {
-                      
-                      LOG(INFO) << "Pushing " << ref_node_head->attrs.name << " to the ref_node_heads";
+
+                      LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
 
                       ref_node_heads.push(n);
                     }
