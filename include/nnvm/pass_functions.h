@@ -257,6 +257,33 @@ inline Graph GradientV2(
   return ApplyPass(std::move(graph), "GradientV2");
 }
 
+inline Graph GradientV3(
+    Graph graph,
+    std::vector<NodeEntry> ys,
+    std::vector<NodeEntry> xs,
+    std::vector<NodeEntry> ys_out_grad,
+    std::function<NodeEntry(std::vector<NodeEntry>&& inputs)>
+        aggregate_fun = nullptr,
+    std::function<bool(const NodePtr& node_ptr)> mirror_fun = nullptr,
+    std::vector<const Op*> zero_ops = std::vector<const Op*>(),
+    std::string copy_op_str = std::string(),
+    ShapeVector in_arg_shapes = std::vector<TShape>(),
+    DTypeVector in_arg_dtypes = std::vector<int>()) {
+  graph.attrs["grad_ys"] = std::make_shared<any>(std::move(ys));
+  graph.attrs["grad_xs"] = std::make_shared<any>(std::move(xs));
+  graph.attrs["grad_ys_out_grad"] = std::make_shared<any>(std::move(ys_out_grad));
+  graph.attrs["shape_inputs"] = std::make_shared<any>(std::move(in_arg_shapes));
+  graph.attrs["dtype_inputs"] = std::make_shared<any>(std::move(in_arg_dtypes));
+
+  if (aggregate_fun != nullptr) graph.attrs["aggregate_fun"] = std::make_shared<any>(aggregate_fun);
+  if (mirror_fun    != nullptr) graph.attrs["mirror_fun"]    = std::make_shared<any>(mirror_fun);
+
+  if (zero_ops   .size()) graph.attrs["zero_ops"]    = std::make_shared<any>(std::move(zero_ops));
+  if (copy_op_str.size()) graph.attrs["copy_op_str"] = std::make_shared<any>(std::move(copy_op_str));
+
+  return ApplyPass(std::move(graph), "GradientV3");
+}
+
 }  // namespace pass
 }  // namespace nnvm
 #endif  // NNVM_PASS_FUNCTIONS_H_

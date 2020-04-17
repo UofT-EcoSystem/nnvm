@@ -83,7 +83,7 @@ inline bool IsGradDepOnlyOnFwdInputs(
 }
 
 
-Graph Gradient(Graph src) {
+Graph GradientV3(Graph src) {
   const IndexedGraph& idx = src.indexed_graph();
   CHECK_NE(src.attrs.count("grad_xs"), 0U)
       << "Gradient require grad_xs to be presented.";
