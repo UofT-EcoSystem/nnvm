@@ -260,10 +260,13 @@ Graph GradientV3(Graph src) {
                 if (!mirror_fun(ref_node_head)) {
                   subworklist.push(ref_node_head);
                 }
+                uint32_t nid = idx.node_id(ref_node_head);
                 for (uint32_t oid = 0; oid < ref_node_head->num_outputs(); ++oid) {
-                  uint32_t eid = idx.entry_id(idx.node_id(ref_node_head), oid);
+                  uint32_t eid = idx.entry_id(nid, oid);
                   for (const Node* const n : node_entry_ref_map[eid]) {
-                    ref_node_heads.push(n);
+                    if (idx.exist(n)) {
+                      ref_node_heads.push(n);
+                    }
                   }
                 }
               }  // while (!ref_node_heads.empty())
@@ -288,6 +291,9 @@ Graph GradientV3(Graph src) {
     }  // while (!has_subgraph_converged)
     LOG(INFO) << "MirrorMap Size: " << mirror_map.size();
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
+    LOG(INFO) << "Subgraph in Topo-Order: ";
+    for (const Node* n : subgraph_topo_order)
+      LOG(INFO) << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
     // =========================================================================
