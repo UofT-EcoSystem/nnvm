@@ -358,6 +358,9 @@ Graph GradientV3(Graph src) {
     // ----- Forward Pass Ends Here -----
     // =========================================================================
   }  // while (!worklist.empty)
+  LOG(INFO) << "Finished the Echo compiler pass";
+  LOG(INFO) << "MirrorMap Size: " << mirror_map.size() << " vs. "
+            << "Number of Operator Nodes: " << idx.num_nodes();
   DFSVisit(ys,
            [&](const NodePtr& node) {
              if (mirror_map[node.get()] != nullptr) {
