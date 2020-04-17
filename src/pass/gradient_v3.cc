@@ -553,7 +553,7 @@ Graph BuildBackwardGraph(
 }
 
 // register pass
-NNVM_REGISTER_PASS(MXGradient)
+NNVM_REGISTER_PASS(GradientV3)
 .describe("Return a gradient graph of src.attrs[\"ys\"] wrt src.attrs[\"xs\"]")
 .set_body(GradientV3)
 .set_change_graph(true)
