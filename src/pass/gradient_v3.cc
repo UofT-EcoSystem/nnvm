@@ -347,10 +347,10 @@ Graph GradientV3(Graph src) {
     }  // while (!has_subgraph_converged)
     LOG(INFO) << "MirrorMap Size: " << mirror_map.size();
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
-    // LOG(INFO) << "Subgraph in Topo-Order: ";
-    // for (const Node* n : subgraph_topo_order)
-    //   std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
-    // std::cout << std::endl;
+    LOG(INFO) << "Subgraph in Topo-Order: ";
+    for (const Node* n : subgraph_topo_order)
+      std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+    std::cout << std::endl;
     LOG(INFO) << "Subgraph Construction Ends Here";
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
