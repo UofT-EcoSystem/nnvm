@@ -253,18 +253,18 @@ Graph GradientV3(Graph src) {
       has_subgraph_converged = true;
       for (const Node* subgraph_node : subgraph_topo_order) {
 
-        LOG(INFO) << "Processing Subgraph Node: " << subgraph_node->attrs.name;
+        // LOG(INFO) << "Processing Subgraph Node: " << subgraph_node->attrs.name;
 
         for (const NodeEntry& subgraph_node_entry :
              subgraph_node->inputs) {
           const std::unordered_set<const Node*>& ref_nodes =
               node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(subgraph_node_entry)];
 
-          std::cout << "Reference Nodes: ";
-          for (const Node* n : ref_nodes) {
-            std::cout << n->attrs.name << " -> ";
-          }
-          std::cout << std::endl;
+          // std::cout << "Reference Nodes: ";
+          // for (const Node* n : ref_nodes) {
+          //   std::cout << n->attrs.name << " -> ";
+          // }
+          // std::cout << std::endl;
 
           // if there are other nodes that reference the node entry and that
           // node satisfies the following condition:
@@ -274,7 +274,7 @@ Graph GradientV3(Graph src) {
           // we add that node to the subgraph and adjust the topological order
           for (const Node* ref_node : ref_nodes) {
 
-            LOG(INFO) << "Processing Reference Node: " << ref_node->attrs.name;
+            // LOG(INFO) << "Processing Reference Node: " << ref_node->attrs.name;
 
             if (ref_node != subgraph_node && idx.exist(ref_node) &&
                 subgraph.find(ref_node) == subgraph.end() &&
@@ -286,7 +286,7 @@ Graph GradientV3(Graph src) {
               for (; !ref_node_heads.empty(); ref_node_heads.pop()) {
                 const Node* ref_node_head = ref_node_heads.front();
 
-                LOG(INFO) << "Processing Reference Node Head: " << ref_node_head->attrs.name;
+                // LOG(INFO) << "Processing Reference Node Head: " << ref_node_head->attrs.name;
 
                 if (!mirror_fun(ref_node_head)) {
                   subworklist.push(ref_node_head);
@@ -296,16 +296,16 @@ Graph GradientV3(Graph src) {
                 for (uint32_t oid = 0; oid < ref_node_head->num_outputs(); ++oid) {
                   uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
 
-                  std::cout << "Reference Nodes in FwdProp: ";
-                  for (const Node* n : node_entry_ref_map[eid]) {
-                    std::cout << n->attrs.name << " -> ";
-                  }
-                  std::cout << std::endl;
+                  // std::cout << "Reference Nodes in FwdProp: ";
+                  // for (const Node* n : node_entry_ref_map[eid]) {
+                  //   std::cout << n->attrs.name << " -> ";
+                  // }
+                  // std::cout << std::endl;
 
                   for (const Node* const n : node_entry_ref_map[eid]) {
                     if (idx.exist(n)) {
 
-                      LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
+                      // LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
 
                       ref_node_heads.push(n);
                     }
@@ -313,19 +313,19 @@ Graph GradientV3(Graph src) {
                 }  // for (oid ∈ [0, ref_node_head->num_outputs()))
               }  // while (!ref_node_heads.empty())
 
-              LOG(INFO) << "Subgraph in Topo-Order: ";
-              for (const Node* n : subgraph_topo_order)
-                std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
-              std::cout << std::endl;
-              std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
+              // LOG(INFO) << "Subgraph in Topo-Order: ";
+              // for (const Node* n : subgraph_topo_order)
+              //   std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+              // std::cout << std::endl;
+              // std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
 
               subworklist_backprop();
 
-              LOG(INFO) << "Subgraph in Topo-Order: ";
-              for (const Node* n : subgraph_topo_order)
-                std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
-              std::cout << std::endl;
-              std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
+              // LOG(INFO) << "Subgraph in Topo-Order: ";
+              // for (const Node* n : subgraph_topo_order)
+              //   std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+              // std::cout << std::endl;
+              // std::cout << "Subgraph Size: " << subgraph.size() << std::endl;
 
               // We can safely insert the current node at the end of the list
               // WITHOUT violating the topological order, the reason is because
