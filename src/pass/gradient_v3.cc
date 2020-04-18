@@ -523,9 +523,10 @@ Graph BuildBackwardGraph(
     if ((*rit)->inputs.size() != 0) {
       // If the current operator node has inputs, we will have to further
       // propagate the gradients backward.
-      NodePtr fwd_node = (mirror_map.empty() ||
-                          mirror_map.at(ptr.get()) == nullptr) ?
-                         ptr : mirror_map.at(ptr.get());
+      // NodePtr fwd_node = (mirror_map.empty() ||
+      //                     mirror_map.at(ptr.get()) == nullptr) ?
+      //                    ptr : mirror_map.at(ptr.get());
+      NodePtr fwd_node = ptr;
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
         // The gradient function is applied to the forward operator node (or the
