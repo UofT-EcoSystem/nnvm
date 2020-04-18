@@ -201,6 +201,7 @@ Graph GradientV3(Graph src) {
     // function into the worklist as the new head. During the traversal, we
     // build up the subgraph and its topological order at the same time.
 
+    LOG(INFO) << "Workitem: " << workitem->attrs.name;
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();    
 
     auto subworklist_backprop = [&subworklist, &subgraph,
