@@ -286,6 +286,13 @@ Graph GradientV3(Graph src) {
                 uint32_t nid = idx.node_id(ref_node_head);
                 for (uint32_t oid = 0; oid < ref_node_head->num_outputs(); ++oid) {
                   uint32_t eid = idx.entry_id(nid, oid);
+
+                  std::cout << "Reference Nodes in FwdProp: ";
+                  for (const Node* n : node_entry_ref_map[eid]) {
+                    std::cout << n->attrs.name << " -> ";
+                  }
+                  std::cout << std::endl;
+
                   for (const Node* const n : node_entry_ref_map[eid]) {
                     if (idx.exist(n)) {
 
