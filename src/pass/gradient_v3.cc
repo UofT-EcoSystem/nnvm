@@ -229,6 +229,15 @@ Graph GradientV3(Graph src) {
                 subworklist.push(n.get());
               }
             }
+
+            if (subworkitem->attrs.name == "_plus800") {
+              std::cout << "Plus 800 Inputs: {";
+              for (const NodeEntry& e : subworkitem->inputs) {
+                std::cout << e.node->attrs.name << ", ";
+              }
+              std::cout << "}" << std::endl;
+            }
+
           }  // while (!subworklist.empty())
           subgraph_topo_order.insert(subgraph_topo_order.end(),
                                      subworklist_topo_order.begin(),
