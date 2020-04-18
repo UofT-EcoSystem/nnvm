@@ -391,12 +391,12 @@ Graph GradientV3(Graph src) {
           std::unordered_map<const Node*, NodePtr> ::iterator mirror_map_iter;
           for (NodeEntry& e : subgraph_node_mirror->inputs) {
             mirror_map_iter = mirror_map.find(e.node.get());
-            e.node = mirror_map_iter == mirror_map.end() ?
+            e.node = mirror_map_iter == mirror_map.end() || mirror_map_iter->second == nullptr ?
                      e.node : mirror_map_iter->second;
           }
           for (NodePtr& n : subgraph_node_mirror->control_deps) {
             mirror_map_iter = mirror_map.find(n.get());
-            n = mirror_map_iter == mirror_map.end() ? n : mirror_map_iter->second;
+            n = mirror_map_iter == mirror_map.end() || mirror_map_iter->second == nullptr ? n : mirror_map_iter->second;
           }
           mirror_map[subgraph_node] = subgraph_node_mirror;
         }  // if (released_memory > newly_allocated_memory)
