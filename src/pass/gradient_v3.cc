@@ -292,9 +292,9 @@ Graph GradientV3(Graph src) {
                   subworklist.push(ref_node_head);
                   continue;
                 }
-                uint32_t nid = idx.node_id(ref_node_head);
+                uint32_t nid = gsrc_no_mirroring_idx.node_id(ref_node_head);
                 for (uint32_t oid = 0; oid < ref_node_head->num_outputs(); ++oid) {
-                  uint32_t eid = idx.entry_id(nid, oid);
+                  uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
 
                   std::cout << "Reference Nodes in FwdProp: ";
                   for (const Node* n : node_entry_ref_map[eid]) {
@@ -358,9 +358,9 @@ Graph GradientV3(Graph src) {
     std::unordered_map<uint32_t, uint32_t> subgraph_node_entry_ref_cnt;
     for (const Node* subgraph_node : subgraph_topo_order) {
       CHECK(idx.exist(subgraph_node)) << "Every subgraph node must be part of the forward graph.";
-      uint32_t nid = idx.node_id(subgraph_node);
+      uint32_t nid = gsrc_no_mirroring_idx.node_id(subgraph_node);
       for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
-        uint32_t eid = idx.entry_id(nid, oid);
+        uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
         subgraph_node_entry_ref_cnt[eid] = node_entry_ref_map[eid].size();
       }
     }  // for (subgraph_node ∈ subgraph_nodes)
@@ -370,13 +370,14 @@ Graph GradientV3(Graph src) {
         // if the node satisfies the mirroring function, we compare the memory
         // allocated vs. the memory released by forward propagating the node
         uint32_t newly_allocated_memory = 0, released_memory = 0,
-                 nid = idx.node_id(subgraph_node);
+                 nid = gsrc_no_mirroring_idx.node_id(subgraph_node);
         for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
-          uint32_t eid = idx.entry_id(nid, oid);
+          uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
           newly_allocated_memory += src_shape[eid].Size() * sizeof(float);
         }
         for (const NodeEntry& e : subgraph_node->inputs) {
-          uint32_t eid = idx.entry_id(e), ref_cnt = subgraph_node_entry_ref_cnt[eid];
+          uint32_t eid = gsrc_no_mirroring_idx.entry_id(e),
+                   ref_cnt = subgraph_node_entry_ref_cnt[eid];
           --ref_cnt;
           if (ref_cnt == 0) {
             released_memory += src_shape[eid].Size() * sizeof(float);
