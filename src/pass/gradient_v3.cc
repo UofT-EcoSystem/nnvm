@@ -250,6 +250,13 @@ Graph GradientV3(Graph src) {
              subgraph_node->inputs) {
           const std::unordered_set<const Node*>& ref_nodes =
               node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(subgraph_node_entry)];
+
+          std::cout << "Reference Nodes: ";
+          for (const Node* n : ref_nodes) {
+            std::cout << n->attrs.name << " -> ";
+          }
+          std::cout << std::endl;
+
           // if there are other nodes that reference the node entry and that
           // node satisfies the following condition:
           //   (1) belongs to the forward graph
