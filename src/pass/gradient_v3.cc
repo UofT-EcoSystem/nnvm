@@ -200,6 +200,9 @@ Graph GradientV3(Graph src) {
     // has been hit), in which case we put the node that fails the mirroring
     // function into the worklist as the new head. During the traversal, we
     // build up the subgraph and its topological order at the same time.
+
+    LOG(INFO) << "Subgraph  Size: " << subgraph  .size();    
+
     auto subworklist_backprop = [&subworklist, &subgraph,
                                  &subgraph_topo_order,
                                  &mirror_fun, &worklist]() {
@@ -229,15 +232,6 @@ Graph GradientV3(Graph src) {
                 subworklist.push(n.get());
               }
             }
-
-            if (subworkitem->attrs.name == "_plus800") {
-              std::cout << "Plus 800 Inputs: {";
-              for (const NodeEntry& e : subworkitem->inputs) {
-                std::cout << e.node->attrs.name << ", ";
-              }
-              std::cout << "}" << std::endl;
-            }
-
           }  // while (!subworklist.empty())
           subgraph_topo_order.insert(subgraph_topo_order.end(),
                                      subworklist_topo_order.begin(),
@@ -245,6 +239,9 @@ Graph GradientV3(Graph src) {
         };
     subworklist_backprop();
     LOG(INFO) << "Backward Pass Ends Here";
+
+    LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
+
     // =========================================================================
     // ----- Backward Pass Ends Here -----
     // =========================================================================
