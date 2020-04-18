@@ -347,10 +347,10 @@ Graph GradientV3(Graph src) {
     }  // while (!has_subgraph_converged)
     LOG(INFO) << "MirrorMap Size: " << mirror_map.size();
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
-    LOG(INFO) << "Subgraph in Topo-Order: ";
-    for (const Node* n : subgraph_topo_order)
-      std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
-    std::cout << std::endl;
+    // LOG(INFO) << "Subgraph in Topo-Order: ";
+    // for (const Node* n : subgraph_topo_order)
+    //   std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
+    // std::cout << std::endl;
     LOG(INFO) << "Subgraph Construction Ends Here";
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
@@ -523,10 +523,10 @@ Graph BuildBackwardGraph(
     if ((*rit)->inputs.size() != 0) {
       // If the current operator node has inputs, we will have to further
       // propagate the gradients backward.
-      // NodePtr fwd_node = (mirror_map.empty() ||
-      //                     mirror_map.at(ptr.get()) == nullptr) ?
-      //                    ptr : mirror_map.at(ptr.get());
-      NodePtr fwd_node = ptr;
+      NodePtr fwd_node = (mirror_map.empty() ||
+                          mirror_map.at(ptr.get()) == nullptr) ?
+                         ptr : mirror_map.at(ptr.get());
+      // NodePtr fwd_node = ptr;
       std::vector<NodeEntry> input_grads;
       if (grad_fun_map.count(ptr->op())) {
         // The gradient function is applied to the forward operator node (or the
