@@ -68,21 +68,20 @@ Graph BuildBackwardGraph(
 inline bool IsGradDepOnlyOnFwdInputs(
     const std::vector<NodeEntry>& input_grads,
     const NodePtr& fwd_node) {
-  bool is_grad_dep_only_on_fwd_inputs = false;
+  // bool is_grad_dep_only_on_fwd_inputs = true;
   for (const NodeEntry& input_grad_entry : input_grads) {
     for (const NodeEntry& input_grad_input_entry :
          input_grad_entry.node->inputs) {
       if (input_grad_input_entry.node == fwd_node) {
-        is_grad_dep_only_on_fwd_inputs = true;
-        break;
+        return false;
       }
     }
-    if (is_grad_dep_only_on_fwd_inputs) break;
   }
-  return is_grad_dep_only_on_fwd_inputs;
+  // return is_grad_dep_only_on_fwd_inputs;
+  return true;
 }
 
-// #define ECHO_DEBUG
+#define ECHO_DEBUG
 
 
 Graph GradientV3(Graph src) {
@@ -455,6 +454,12 @@ Graph GradientV3(Graph src) {
           std::vector<NodeEntry> input_grads =
               grad_fun_map[subgraph_node->op()](fake_out_grad_node, fake_out_grads);
           if (IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
+
+#if defined(ECHO_DEBUG)
+          LOG(INFO) << "Subgraph node " << subgraph_node->attrs.name << " ("
+                    << subgraph_node->op()->name << ") has been marked as input-only";
+#endif
+
             mirror_map[subgraph_node] = fake_out_grad_node;
           }
         }
@@ -590,11 +595,11 @@ Graph BuildBackwardGraph(
             for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
               if (control_dep == fwd_node) {
                 control_dep = ptr;
-                for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
-                  input_grad_entry.node->control_deps.push_back(
-                      fwd_node_control_dep);
-                }
-                break;
+                // for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+                //   input_grad_entry.node->control_deps.push_back(
+                //       fwd_node_control_dep);
+                // }
+                // break;
               }
             }  // for (control_dep ∈ input_grad.control_deps)
             for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
