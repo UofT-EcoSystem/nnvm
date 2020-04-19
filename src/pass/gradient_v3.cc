@@ -165,6 +165,7 @@ Graph GradientV3(Graph src) {
       if (gsrc_no_mirroring_idx[inode.inputs[i].node_id].source->attrs.name ==
           "decoder_rnn_concat_target_context_t87") {
         LOG(INFO) << "Reference Node: " << inode.source->attrs.name;
+        LOG(INFO) << "Entry ID: " << gsrc_no_mirroring_idx.entry_id(inode.inputs[i]);
       }
 
     }
