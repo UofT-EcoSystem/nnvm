@@ -82,6 +82,8 @@ inline bool IsGradDepOnlyOnFwdInputs(
   return is_grad_dep_only_on_fwd_inputs;
 }
 
+#define ECHO_DEBUG
+
 
 Graph GradientV3(Graph src) {
   const IndexedGraph& idx = src.indexed_graph();
@@ -208,8 +210,10 @@ Graph GradientV3(Graph src) {
     // function into the worklist as the new head. During the traversal, we
     // build up the subgraph and its topological order at the same time.
 
+#if defined(ECHO_DEBUG)
     LOG(INFO) << "Workitem: " << workitem->attrs.name;
-    LOG(INFO) << "Subgraph  Size: " << subgraph  .size();    
+    LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
+#endif
 
     auto subworklist_backprop = [&subworklist, &subgraph,
                                  &subgraph_topo_order,
@@ -246,9 +250,11 @@ Graph GradientV3(Graph src) {
                                      subworklist_topo_order.end());
         };
     subworklist_backprop();
-    LOG(INFO) << "Backward Pass Ends Here";
 
+#if defined(ECHO_DEBUG)
+    LOG(INFO) << "Backward Pass Ends Here";
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
+#endif
 
     // =========================================================================
     // ----- Backward Pass Ends Here -----
@@ -265,7 +271,7 @@ Graph GradientV3(Graph src) {
           const std::unordered_set<const Node*>& ref_nodes =
               node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(subgraph_node_entry)];
 
-
+#if defined(ECHO_DEBUG)
           if (subgraph_node->attrs.name == "decoder_rnn_concat_target_context_t87") {
             std::cout << "Reference Nodes of Subgraph Node: " << subgraph_node->attrs.name << std::endl;
             std::cout << "Node Entry Source: " << subgraph_node_entry.node->attrs.name << std::endl; 
@@ -276,6 +282,7 @@ Graph GradientV3(Graph src) {
             }
             std::cout << std::endl;
           }
+#endif
 
           // if there are other nodes that reference the node entry and that
           // node satisfies the following condition:
@@ -304,9 +311,10 @@ Graph GradientV3(Graph src) {
 
                 if (!mirror_fun(ref_node_head)) {
 
+#if defined(ECHO_DEBUG)
                   LOG(INFO) << "Subgraph Node: " << subgraph_node->attrs.name;
                   LOG(INFO) << "New Subworklist Head: " << ref_node_head->attrs.name; 
-
+#endif 
                   subworklist.push(ref_node_head);
                   continue;
                 }
@@ -323,9 +331,10 @@ Graph GradientV3(Graph src) {
                   for (const Node* const n : node_entry_ref_map[eid]) {
                     if (idx.exist(n)) {
 
+#if defined(ECHO_DEBUG)
                       LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
-
                       LOG(INFO) << "Entry ID of " << ref_node_head->attrs.name << ": " << eid;
+#endif
 
                       ref_node_heads.push(n);
                     }
@@ -365,6 +374,8 @@ Graph GradientV3(Graph src) {
         }
       }  // for (subgraph_node ∈ subgraph_topo_order)
     }  // while (!has_subgraph_converged)
+
+#if defined(ECHO_DEBUG)
     LOG(INFO) << "MirrorMap Size: " << mirror_map.size();
     LOG(INFO) << "Subgraph  Size: " << subgraph  .size();
     LOG(INFO) << "Subgraph in Topo-Order: ";
@@ -372,6 +383,8 @@ Graph GradientV3(Graph src) {
       std::cout << n->attrs.name << " (" << n->op()->name << ")" << " -> ";
     std::cout << std::endl;
     LOG(INFO) << "Subgraph Construction Ends Here";
+#endif
+
     // =========================================================================
     // ----- Subgraph Construction Ends Here -----
     // =========================================================================
@@ -441,14 +454,22 @@ Graph GradientV3(Graph src) {
         }
       }  // if (mirror_fun(subgraph_node))
     }  // for (subgraph_node ∈ subgraph_topo_order)
+
+#if defined(ECHO_DEBUG)
     LOG(INFO) << "Forward Pass Ends Here";
+#endif
     // =========================================================================
     // ----- Forward Pass Ends Here -----
     // =========================================================================
   }  // while (!worklist.empty)
+
+#if defined(ECHO_DEBUG)
   LOG(INFO) << "Finished the Echo compiler pass";
   LOG(INFO) << "MirrorMap Size: " << mirror_map.size() << " vs. "
             << "Number of Operator Nodes: " << idx.num_nodes();
+#endif
+
+
   DFSVisit(ys,
            [&](const NodePtr& node) {
              if (mirror_map[node.get()] != nullptr) {
