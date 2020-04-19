@@ -268,7 +268,8 @@ Graph GradientV3(Graph src) {
 
           if (subgraph_node->attrs.name == "decoder_rnn_concat_target_context_t87") {
             std::cout << "Reference Nodes of Subgraph Node: " << subgraph_node->attrs.name << std::endl;
-            std::cout << "Node Entry Index: " << subgraph_node_entry.index << std::endl;
+            std::cout << "Node Entry Source: " << subgraph_node_entry.node->attrs.name << std::endl; 
+            std::cout << "Node Entry Index : " << subgraph_node_entry.index << std::endl;
             std::cout << "Reference Nodes of Entry ID: " << gsrc_no_mirroring_idx.entry_id(subgraph_node_entry) << std::endl;
             for (const Node* n : ref_nodes) {
               std::cout << n->attrs.name << " & ";
@@ -287,12 +288,15 @@ Graph GradientV3(Graph src) {
             // LOG(INFO) << "Processing Reference Node: " << ref_node->attrs.name;
 
             if (ref_node != subgraph_node && idx.exist(ref_node) &&
-                subgraph.find(ref_node) == subgraph.end() &&
-                mirror_fun(ref_node)) {
+                subgraph.find(ref_node) == subgraph.end()
+                // && mirror_fun(ref_node)
+                ) {
               // forward propagate from the reference node until the mirroring
               // function returns false
               std::queue<const Node*> ref_node_heads;
               ref_node_heads.push(ref_node);
+              
+
               for (; !ref_node_heads.empty(); ref_node_heads.pop()) {
                 const Node* ref_node_head = ref_node_heads.front();
 
@@ -320,6 +324,7 @@ Graph GradientV3(Graph src) {
                     if (idx.exist(n)) {
 
                       LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
+
                       LOG(INFO) << "Entry ID of " << ref_node_head->attrs.name << ": " << eid;
 
                       ref_node_heads.push(n);
