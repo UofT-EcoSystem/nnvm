@@ -161,6 +161,12 @@ Graph GradientV3(Graph src) {
         }
       }
       node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(inode.inputs[i])].insert(inode.source);
+
+      if (gsrc_no_mirroring_idx[inode.inputs[i].node_id].source->attrs.name ==
+          "decoder_rnn_concat_target_context_t87") {
+        LOG(INFO) << "Reference Node: " << inode.source->attrs.name;
+      }
+
     }
   }  // for (nid ∈ gsrc_no_mirroring.num_nodes)
 
