@@ -314,6 +314,7 @@ Graph GradientV3(Graph src) {
                     if (idx.exist(n)) {
 
                       LOG(INFO) << "Pushing " << n->attrs.name << " to the ref_node_heads";
+                      LOG(INFO) << "Entry ID of " << ref_node_head->attrs.name << ": " << eid;
 
                       ref_node_heads.push(n);
                     }
