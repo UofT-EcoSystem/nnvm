@@ -164,7 +164,7 @@ Graph GradientV3(Graph src) {
 
       if (gsrc_no_mirroring_idx[inode.inputs[i].node_id].source->attrs.name ==
           "decoder_rnn_concat_target_context_t87") {
-        LOG(INFO) << "Reference Node: " << inode.source->attrs.name;
+        LOG(INFO) << "Reference Nodes of decoder_rnn_concat_target_context_t87: " << inode.source->attrs.name;
         LOG(INFO) << "Entry ID: " << gsrc_no_mirroring_idx.entry_id(inode.inputs[i]);
       }
 
@@ -268,6 +268,7 @@ Graph GradientV3(Graph src) {
 
           if (subgraph_node->attrs.name == "decoder_rnn_concat_target_context_t87") {
             std::cout << "Reference Nodes of Subgraph Node: " << subgraph_node->attrs.name << std::endl;
+            std::cout << "Node Entry Index: " << subgraph_node_entry.index << std::endl;
             std::cout << "Reference Nodes of Entry ID: " << gsrc_no_mirroring_idx.entry_id(subgraph_node_entry) << std::endl;
             for (const Node* n : ref_nodes) {
               std::cout << n->attrs.name << " & ";
