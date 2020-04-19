@@ -288,7 +288,8 @@ Graph GradientV3(Graph src) {
 
                 if (!mirror_fun(ref_node_head)) {
 
-                  LOG(INFO) << "New Subworklist Head: " << ref_node_head->attrs.name;
+                  LOG(INFO) << "Subgraph Node: " << subgraph_node->attrs.name;
+                  LOG(INFO) << "New Subworklist Head: " << ref_node_head->attrs.name; 
 
                   subworklist.push(ref_node_head);
                   continue;
