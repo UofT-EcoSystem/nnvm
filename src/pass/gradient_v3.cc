@@ -391,8 +391,22 @@ Graph GradientV3(Graph src) {
     for (const Node* subgraph_node : subgraph_topo_order) {
       CHECK(idx.exist(subgraph_node)) << "Every subgraph node must be part of the forward graph.";
       uint32_t nid = gsrc_no_mirroring_idx.node_id(subgraph_node);
+
+      uint32_t src_nid = idx.node_id(subgraph_node);
+      if (nid != src_nid) {
+        LOG(FATAL) << "The NIDs are different: " << nid << " vs. " << src_nid;
+      }
+
       for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
         uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
+
+        uint32_t src_eid = idx.entry_id(nid, oid);
+
+        if (eid != src_eid) {
+          LOG(FATAL) << "The EIDs are different: " << eid << " vs. " << src_eid;
+        }
+
+
         subgraph_node_entry_ref_cnt[eid] = node_entry_ref_map[eid].size();
       }
     }  // for (subgraph_node ∈ subgraph_nodes)
