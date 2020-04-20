@@ -453,6 +453,13 @@ Graph GradientV3(Graph src) {
           }
           std::vector<NodeEntry> input_grads =
               grad_fun_map[subgraph_node->op()](fake_out_grad_node, fake_out_grads);
+
+          if (subgraph_node->op()->name == "FullyConnected") {
+            if (!IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
+              exit(EXIT_FAILURE);
+            }
+          }
+
           if (IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
 
 #if defined(ECHO_DEBUG)
