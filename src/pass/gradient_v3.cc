@@ -449,32 +449,34 @@ Graph GradientV3(Graph src) {
         // If the subgraph node fails the mirorring condition, it is however
         // still possible for it to be mirrored under the condition that its
         // corresponding gradient node only has data dependencies on its inputs.
-        NodePtr fake_out_grad_node = Node::Create(),
-                fwd_node = Node::Create();
-        *fake_out_grad_node = *subgraph_node;
-        *fwd_node = *subgraph_node;
-        if (grad_fun_map.count(subgraph_node->op())) {
-          std::vector<NodeEntry> fake_out_grads;
-          for (uint32_t oid = 0; oid < fake_out_grad_node->num_outputs(); ++oid) {
-            fake_out_grads.push_back(NodeEntry{fake_out_grad_node, oid, 0});
-          }
-          std::vector<NodeEntry> input_grads =
-              grad_fun_map[subgraph_node->op()](fwd_node, fake_out_grads);
+        
+//         NodePtr fake_out_grad_node = Node::Create(),
+//                 fwd_node = Node::Create();
+//         *fake_out_grad_node = *subgraph_node;
+//         *fwd_node = *subgraph_node;
+//         if (grad_fun_map.count(subgraph_node->op())) {
+//           std::vector<NodeEntry> fake_out_grads;
+//           for (uint32_t oid = 0; oid < fake_out_grad_node->num_outputs(); ++oid) {
+//             fake_out_grads.push_back(NodeEntry{fake_out_grad_node, oid, 0});
+//           }
+//           std::vector<NodeEntry> input_grads =
+//               grad_fun_map[subgraph_node->op()](fwd_node, fake_out_grads);
 
-          if (subgraph_node->op()->name == "FullyConnected") {
-            if (!IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
-              exit(EXIT_FAILURE);
-            }
-          }
+//           if (subgraph_node->op()->name == "FullyConnected") {
+//             if (!IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
+//               exit(EXIT_FAILURE);
+//             }
+//           }
 
-          if (IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
+//           if (IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
 
-#if defined(ECHO_DEBUG)
-          LOG(INFO) << "Subgraph node " << subgraph_node->attrs.name << " ("
-                    << subgraph_node->op()->name << ") has been marked as input-only";
-#endif
+// #if defined(ECHO_DEBUG)
+//           LOG(INFO) << "Subgraph node " << subgraph_node->attrs.name << " ("
+//                     << subgraph_node->op()->name << ") has been marked as input-only";
+// #endif
 
-            mirror_map[subgraph_node] = fake_out_grad_node;
+//             mirror_map[subgraph_node] = fake_out_grad_node;
+
           }
         }
       }  // if (mirror_fun(subgraph_node))
