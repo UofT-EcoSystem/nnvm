@@ -415,7 +415,8 @@ Graph GradientV3(Graph src) {
             released_memory += src_shape[eid].Size() * sizeof(float);
           }
         }
-        if (released_memory > newly_allocated_memory) {
+        if (true) {
+        // if (released_memory > newly_allocated_memory) {
           // mark node as to be mirrored
           NodePtr subgraph_node_mirror = Node::Create();
           *subgraph_node_mirror = *subgraph_node;
