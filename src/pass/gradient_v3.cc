@@ -401,20 +401,24 @@ Graph GradientV3(Graph src) {
       if (mirror_fun(subgraph_node)) {
         // if the node satisfies the mirroring function, we compare the memory
         // allocated vs. the memory released by forward propagating the node
-        uint32_t newly_allocated_memory = 0, released_memory = 0,
-                 nid = gsrc_no_mirroring_idx.node_id(subgraph_node);
-        for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
-          uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
-          newly_allocated_memory += src_shape[eid].Size() * sizeof(float);
-        }
-        for (const NodeEntry& e : subgraph_node->inputs) {
-          uint32_t eid = gsrc_no_mirroring_idx.entry_id(e),
-                   ref_cnt = subgraph_node_entry_ref_cnt[eid];
-          --ref_cnt;
-          if (ref_cnt == 0) {
-            released_memory += src_shape[eid].Size() * sizeof(float);
-          }
-        }
+
+
+        // uint32_t newly_allocated_memory = 0, released_memory = 0,
+        //          nid = gsrc_no_mirroring_idx.node_id(subgraph_node);
+        // for (uint32_t oid = 0; oid < subgraph_node->num_outputs(); ++oid) {
+        //   uint32_t eid = gsrc_no_mirroring_idx.entry_id(nid, oid);
+        //   newly_allocated_memory += src_shape[eid].Size() * sizeof(float);
+        // }
+        // for (const NodeEntry& e : subgraph_node->inputs) {
+        //   uint32_t eid = gsrc_no_mirroring_idx.entry_id(e),
+        //            ref_cnt = subgraph_node_entry_ref_cnt[eid];
+        //   --ref_cnt;
+        //   if (ref_cnt == 0) {
+        //     released_memory += src_shape[eid].Size() * sizeof(float);
+        //   }
+        // }
+
+
         if (true) {
         // if (released_memory > newly_allocated_memory) {
           // mark node as to be mirrored
@@ -597,27 +601,31 @@ Graph BuildBackwardGraph(
         // MIRRORED forward operator node if backward mirroring has been
         // enabled) and the aggregated output gradients.
         input_grads = grad_fun_map[ptr->op()](fwd_node, out_agg_grads);
-        if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
-          // If the mirrored forward node is dead, we have to replace the
-          // control dependency of the mirrored node with the node in the
-          // original forward graph.
-          for (NodeEntry& input_grad_entry : input_grads) {
-            for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
-              if (control_dep == fwd_node) {
-                control_dep = ptr;
-                // for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
-                //   input_grad_entry.node->control_deps.push_back(
-                //       fwd_node_control_dep);
-                // }
-                // break;
-              }
-            }  // for (control_dep ∈ input_grad.control_deps)
-            for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
-              input_grad_entry.node->control_deps.push_back(
-                  fwd_node_control_dep);
-            }
-          }  // for (input_grad_entry ∈ input_grads)
-        }  // if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs)
+        
+        
+        // if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
+        //   // If the mirrored forward node is dead, we have to replace the
+        //   // control dependency of the mirrored node with the node in the
+        //   // original forward graph.
+        //   for (NodeEntry& input_grad_entry : input_grads) {
+        //     for (NodePtr& control_dep : input_grad_entry.node->control_deps) {
+        //       if (control_dep == fwd_node) {
+        //         control_dep = ptr;
+        //         // for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+        //         //   input_grad_entry.node->control_deps.push_back(
+        //         //       fwd_node_control_dep);
+        //         // }
+        //         // break;
+        //       }
+        //     }  // for (control_dep ∈ input_grad.control_deps)
+        //     for (NodePtr& fwd_node_control_dep : fwd_node->control_deps) {
+        //       input_grad_entry.node->control_deps.push_back(
+        //           fwd_node_control_dep);
+        //     }
+        //   }  // for (input_grad_entry ∈ input_grads)
+        // }  // if (fwd_node != ptr && IsGradDepOnlyOnFwdInputs)
+        
+        
         CHECK_EQ((*rit)->inputs.size(), input_grads.size())
             << "Gradient function not returning enough gradient";
       } else if (CheckGradAllZero(out_agg_grads, zero_ops)) {
