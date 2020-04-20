@@ -457,12 +457,12 @@ Graph GradientV3(Graph src) {
               grad_fun_map[subgraph_node->op()](fwd_node, fake_out_grads);
 
           if (subgraph_node->op()->name == "FullyConnected") {
-            if (!IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
+            if (!IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
               exit(EXIT_FAILURE);
             }
           }
 
-          if (IsGradDepOnlyOnFwdInputs(input_grads, fake_out_grad_node)) {
+          if (IsGradDepOnlyOnFwdInputs(input_grads, fwd_node)) {
 
 #if defined(ECHO_DEBUG)
           LOG(INFO) << "Subgraph node " << subgraph_node->attrs.name << " ("
