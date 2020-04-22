@@ -264,18 +264,18 @@ Graph GradientV3(Graph src) {
           const std::unordered_set<const Node*>& ref_nodes =
               node_entry_ref_map[gsrc_no_mirroring_idx.entry_id(subgraph_node_entry)];
 
-#if defined(ECHO_DEBUG)
-          if (subgraph_node->attrs.name == "decoder_rnn_concat_target_context_t87") {
-            std::cout << "Reference Nodes of Subgraph Node: " << subgraph_node->attrs.name << std::endl;
-            std::cout << "Node Entry Source: " << subgraph_node_entry.node->attrs.name << std::endl; 
-            std::cout << "Node Entry Index : " << subgraph_node_entry.index << std::endl;
-            std::cout << "Reference Nodes of Entry ID: " << gsrc_no_mirroring_idx.entry_id(subgraph_node_entry) << std::endl;
-            for (const Node* n : ref_nodes) {
-              std::cout << n->attrs.name << " & ";
-            }
-            std::cout << std::endl;
-          }
-#endif
+// #if defined(ECHO_DEBUG)
+//           if (subgraph_node->attrs.name == "decoder_rnn_concat_target_context_t87") {
+//             std::cout << "Reference Nodes of Subgraph Node: " << subgraph_node->attrs.name << std::endl;
+//             std::cout << "Node Entry Source: " << subgraph_node_entry.node->attrs.name << std::endl; 
+//             std::cout << "Node Entry Index : " << subgraph_node_entry.index << std::endl;
+//             std::cout << "Reference Nodes of Entry ID: " << gsrc_no_mirroring_idx.entry_id(subgraph_node_entry) << std::endl;
+//             for (const Node* n : ref_nodes) {
+//               std::cout << n->attrs.name << " & ";
+//             }
+//             std::cout << std::endl;
+//           }
+// #endif
 
           // if there are other nodes that reference the node entry and that
           // node satisfies the following condition:
